@@ -1,0 +1,75 @@
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# AWS SDK
+boto3==1.34.34
+botocore==1.34.34
+
+# Database
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Redis cache
+redis==5.0.1
+hiredis==2.3.2
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+bcrypt==4.1.2
+python-dotenv==1.0.0
+
+# Data processing
+pandas==2.2.0
+numpy==1.26.3
+scipy==1.11.4
+scikit-learn==1.4.0
+
+# Export & Reporting
+reportlab==4.0.9
+xlsxwriter==3.1.9
+openpyxl==3.1.2
+matplotlib==3.8.2
+Pillow==10.2.0
+
+# Microsoft Teams integration
+pymsteams==0.2.2
+
+# Utilities
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Background jobs
+apscheduler==3.10.4
+
+# HTTP requests
+requests==2.31.0
+httpx==0.26.0
+
+# Validation
+email-validator==2.1.0.post1
+
+# CORS - handled via FastAPI middleware
+# python-cors is not needed for FastAPI
+
+# Jenkins AI Monitor
+langgraph==0.2.16
+anthropic==0.18.1
+python-jenkins==1.8.2
+PyGithub==2.1.1
+GitPython==3.1.41
+
+# Development dependencies
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+moto==5.0.0
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
+cryptography==42.0.2
