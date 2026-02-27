@@ -1,3 +1,0 @@
-"""
-FinOps audit services.
-"""
