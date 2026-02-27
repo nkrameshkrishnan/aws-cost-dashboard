@@ -16,6 +16,7 @@ import { QuickForecastWidget } from '@/components/dashboard/QuickForecastWidget'
 import { ProfileSelector } from '@/components/common/ProfileSelector'
 import { InfoModal } from '@/components/common/InfoModal'
 import { LoadingPage } from '@/components/common/LoadingPage'
+import { SetupRequired } from '@/components/common/SetupRequired'
 import { useProfileStore } from '@/store/profileStore'
 import { budgetsApi } from '@/api/budgets'
 import { awsAccountsApi } from '@/api/awsAccounts'
@@ -34,10 +35,11 @@ export function Dashboard() {
 
 
   // Check if AWS accounts are configured
-  const { data: awsAccounts, isLoading: loadingAccounts } = useQuery({
+  const { data: awsAccounts, isLoading: loadingAccounts, error: accountsError } = useQuery({
     queryKey: ['awsAccounts'],
     queryFn: () => awsAccountsApi.list(),
-    retry: 1
+    retry: 1,
+    retryDelay: 1000,
   })
 
   const hasAccounts = awsAccounts && awsAccounts.length > 0
@@ -205,6 +207,11 @@ export function Dashboard() {
   // Show loading page while checking for accounts
   if (loadingAccounts) {
     return <LoadingPage message="Loading AWS accounts..." />
+  }
+
+  // Show setup page if there's an error fetching accounts or no accounts exist
+  if (accountsError || !hasAccounts) {
+    return <SetupRequired error={accountsError as Error | undefined} type="aws-accounts" />
   }
 
   return (
