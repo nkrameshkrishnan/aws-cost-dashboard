@@ -98,3 +98,6 @@ exports/
 *.pdf
 *.csv
 *.xlsx
+
+# GitHub Actions workflows backup (not pushed due to PAT scope limitation)
+.github-workflows-backup/

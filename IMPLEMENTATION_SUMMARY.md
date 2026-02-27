@@ -76,14 +76,13 @@
    - Added `deploy` script: `npm run build && gh-pages -d dist`
    - Added `gh-pages` to devDependencies
 
-3. **GitHub Actions Workflow** (`.github/workflows/deploy-frontend.yml`)
-   - Builds frontend with production API URL
-   - Deploys to GitHub Pages automatically
-   - Triggered on push to main or manual dispatch
-
-4. **Production Environment** (`frontend/.env.production`)
+3. **Production Environment** (`frontend/.env.production`)
    - Default production configuration
-   - API URL injected by GitHub Actions during build
+   - API URL set via environment variable or file before build
+
+4. **No Jekyll File** (`frontend/public/.nojekyll`)
+   - Prevents GitHub from processing site with Jekyll
+   - Ensures all files (including _prefixed) are served correctly
 
 ---
 
@@ -199,51 +198,49 @@ terraform output api_gateway_url
 
 ---
 
-### Step 4: Configure GitHub Pages
+### Step 4: Configure GitHub Pages (Branch-Based Deployment)
 
-**1. Enable GitHub Pages in Repository Settings:**
+**1. Deploy Frontend to gh-pages Branch:**
+   ```bash
+   cd frontend
+
+   # Set API Gateway URL
+   export VITE_API_BASE_URL="https://abc123xyz.execute-api.us-east-1.amazonaws.com"
+
+   # Install dependencies
+   npm install
+
+   # Build and deploy to gh-pages branch
+   npm run deploy
+   ```
+
+**2. Enable GitHub Pages in Repository Settings:**
    - Go to repository **Settings** → **Pages**
    - Under "Build and deployment":
-     - Source: **GitHub Actions**
+     - Source: **Deploy from a branch**
+     - Branch: **gh-pages**
+     - Folder: **/ (root)**
    - Click **Save**
 
-**2. Add GitHub Secrets:**
-   - Go to repository **Settings** → **Secrets and variables** → **Actions**
-   - Click **New repository secret**
-   - Add secret:
-     - Name: `API_GATEWAY_URL`
-     - Value: `https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod` (from Terraform output)
-   - Click **Add secret**
+**3. Wait for Deployment (1-2 minutes)**
+   - GitHub will automatically deploy from the gh-pages branch
+   - Check Settings → Pages for the published URL
 
----
+**4. Update Frontend with Future Changes:**
+   ```bash
+   # Make your frontend changes...
 
-### Step 5: Deploy Frontend
+   # Set API Gateway URL
+   export VITE_API_BASE_URL="https://abc123xyz.execute-api.us-east-1.amazonaws.com"
 
-**Option A: Automatic Deployment (Recommended)**
+   # Rebuild and redeploy
+   cd frontend
+   npm run deploy
+   ```
 
-```bash
-# Push to main branch to trigger GitHub Actions
-git add .
-git commit -m "Configure GitHub Pages deployment"
-git push origin main
+   The gh-pages branch will automatically update and GitHub Pages will redeploy within 1-2 minutes.
 
-# GitHub Actions will automatically:
-# 1. Build the frontend with API Gateway URL
-# 2. Deploy to GitHub Pages
-# 3. Make it available at: https://YOUR_USERNAME.github.io/aws-cost-dashboard/
-```
-
-**Option B: Manual Deployment**
-
-```bash
-# Trigger workflow manually from GitHub Actions UI
-# Go to Actions → Deploy Frontend to GitHub Pages → Run workflow
-```
-
-**3. Wait for Deployment:**
-   - Check GitHub Actions tab for deployment status
-   - Should complete in 2-3 minutes
-   - Access your app at: `https://YOUR_USERNAME.github.io/aws-cost-dashboard/`
+**📖 For detailed deployment instructions, see:** [GITHUB_PAGES_DEPLOYMENT.md](GITHUB_PAGES_DEPLOYMENT.md)
 
 ---
 
