@@ -203,14 +203,12 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8000
   }
 
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
 
-    deployment_circuit_breaker {
-      enable   = true
-      rollback = true
-    }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   enable_execute_command = true
@@ -221,8 +219,6 @@ resource "aws_ecs_service" "backend" {
       Name = "${var.name_prefix}-backend-service"
     }
   )
-
-  depends_on = [var.backend_target_group_arn]
 }
 
 # ECS Service - Frontend
@@ -245,14 +241,12 @@ resource "aws_ecs_service" "frontend" {
     container_port   = 80
   }
 
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
 
-    deployment_circuit_breaker {
-      enable   = true
-      rollback = true
-    }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   enable_execute_command = true
@@ -263,8 +257,6 @@ resource "aws_ecs_service" "frontend" {
       Name = "${var.name_prefix}-frontend-service"
     }
   )
-
-  depends_on = [var.frontend_target_group_arn]
 }
 
 # Auto-Scaling Target - Backend

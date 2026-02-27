@@ -97,7 +97,7 @@ resource "aws_lb_listener" "http" {
       }
     }
 
-    target_group_arn = var.certificate_arn != "" ? null : aws_lb_target_group.frontend.arn
+    target_group_arn = var.certificate_arn != "" ? null : aws_lb_target_group.backend.arn
   }
 }
 

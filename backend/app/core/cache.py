@@ -35,7 +35,7 @@ class CacheManager:
             # Test connection
             self.redis_client.ping()
             logger.info("Redis connection established successfully")
-        except redis.ConnectionError as e:
+        except (redis.ConnectionError, redis.TimeoutError, Exception) as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis_client = None
 

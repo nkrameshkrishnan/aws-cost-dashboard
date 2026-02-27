@@ -89,15 +89,15 @@ module "database" {
   source = "./modules/database"
 
   name_prefix             = local.name_prefix
-  db_name                 = var.db_name
-  db_username             = var.db_username
-  db_password             = var.db_password
+  database_name           = var.db_name
+  master_username         = var.db_username
+  master_password         = var.db_password
   instance_class          = var.db_instance_class
   allocated_storage       = var.db_allocated_storage
   engine_version          = var.db_engine_version
   multi_az                = var.environment == "production"
-  subnet_ids              = module.networking.private_subnet_ids
-  vpc_security_group_ids  = [module.security.rds_security_group_id]
+  private_subnet_ids      = module.networking.private_subnet_ids
+  security_group_id       = module.security.rds_security_group_id
   backup_retention_period = var.environment == "production" ? 7 : 1
   skip_final_snapshot     = var.environment != "production"
   tags                    = local.common_tags
@@ -116,8 +116,8 @@ module "cache" {
   node_type               = var.redis_node_type
   num_cache_nodes         = var.redis_num_cache_nodes
   engine_version          = var.redis_engine_version
-  subnet_ids              = module.networking.private_subnet_ids
-  vpc_security_group_ids  = [module.security.redis_security_group_id]
+  private_subnet_ids      = module.networking.private_subnet_ids
+  security_group_id       = module.security.elasticache_security_group_id
   snapshot_retention_limit = var.environment == "production" ? 5 : 0
   tags                    = local.common_tags
 
@@ -134,7 +134,7 @@ module "secrets" {
   name_prefix    = local.name_prefix
   db_username    = var.db_username
   db_password    = var.db_password
-  db_endpoint    = module.database.endpoint
+  db_endpoint    = module.database.address
   db_port        = module.database.port
   db_name        = var.db_name
   redis_endpoint = module.cache.primary_endpoint_address
@@ -197,7 +197,7 @@ module "ecs" {
   environment               = var.environment
   aws_region                = var.aws_region
   private_subnet_ids        = module.networking.private_subnet_ids
-  ecs_security_group_id     = module.security.ecs_security_group_id
+  ecs_security_group_id     = module.security.ecs_tasks_security_group_id
   task_execution_role_arn   = module.monitoring.ecs_task_execution_role_arn
   task_role_arn             = module.monitoring.ecs_task_role_arn
   backend_target_group_arn  = module.alb.backend_target_group_arn
@@ -213,7 +213,7 @@ module "ecs" {
   max_capacity              = var.ecs_max_capacity
   db_username               = var.db_username
   db_password               = var.db_password
-  db_endpoint               = module.database.endpoint
+  db_endpoint               = module.database.address
   db_port                   = module.database.port
   db_name                   = var.db_name
   redis_endpoint            = module.cache.primary_endpoint_address

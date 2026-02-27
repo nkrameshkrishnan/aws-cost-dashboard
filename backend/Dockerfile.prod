@@ -66,6 +66,6 @@ CMD ["gunicorn", "app.main:app", \
      "--bind", "0.0.0.0:8000", \
      "--timeout", "120", \
      "--keep-alive", "5", \
-     "--access-logfile", "/var/log/cost-dashboard/access.log", \
-     "--error-logfile", "/var/log/cost-dashboard/error.log", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
      "--log-level", "info"]

@@ -101,3 +101,19 @@ exports/
 
 # GitHub Actions workflows backup (not pushed due to PAT scope limitation)
 .github-workflows-backup/
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl

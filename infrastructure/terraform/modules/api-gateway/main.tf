@@ -56,6 +56,11 @@ resource "aws_apigatewayv2_integration" "alb" {
   connection_id      = var.vpc_link_id
 
   payload_format_version = "1.0"
+
+  # Strip the /prod stage prefix from the path before forwarding to ALB
+  request_parameters = {
+    "overwrite:path" = "$request.path"
+  }
 }
 
 # ==============================================================================
@@ -80,9 +85,9 @@ resource "aws_apigatewayv2_route" "root" {
 
 resource "aws_apigatewayv2_stage" "prod" {
   api_id      = aws_apigatewayv2_api.main.id
-  name        = "prod"
+  name        = "$default"
   auto_deploy = true
-  description = "Production stage"
+  description = "Default stage (no path prefix)"
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
