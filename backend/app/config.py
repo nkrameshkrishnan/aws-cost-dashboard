@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000"
 
     # Database Configuration
     DATABASE_URL: str = Field(
@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     CACHE_TTL_SERVICE_BREAKDOWN: int = 900  # 15 minutes
     CACHE_TTL_BUDGET_STATUS: int = 600  # 10 minutes
     CACHE_TTL_AUDIT_RESULTS: int = 1800  # 30 minutes
+
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """Parse CORS_ORIGINS from comma-separated string."""
+        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(',') if origin.strip()]
 
     @property
     def redis_url(self) -> str:

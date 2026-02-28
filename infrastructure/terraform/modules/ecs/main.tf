@@ -79,6 +79,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "REDIS_PORT"
           value = tostring(var.redis_port)
+        },
+        {
+          name  = "CORS_ORIGINS_STR"
+          value = join(",", var.cors_allowed_origins)
         }
       ]
 

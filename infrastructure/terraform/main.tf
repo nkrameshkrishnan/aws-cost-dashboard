@@ -221,6 +221,7 @@ module "ecs" {
   app_secrets_arn           = module.secrets.app_secrets_arn
   backend_log_group_name    = module.monitoring.backend_log_group_name
   frontend_log_group_name   = module.monitoring.frontend_log_group_name
+  cors_allowed_origins      = var.cors_allowed_origins
   tags                      = local.common_tags
 
   depends_on = [

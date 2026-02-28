@@ -154,6 +154,12 @@ variable "frontend_log_group_name" {
   type        = string
 }
 
+variable "cors_allowed_origins" {
+  description = "List of allowed CORS origins for the backend API"
+  type        = list(string)
+  default     = ["http://localhost:5173", "http://localhost:3000"]
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
