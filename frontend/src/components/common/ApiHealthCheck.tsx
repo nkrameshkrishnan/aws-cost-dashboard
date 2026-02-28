@@ -32,7 +32,7 @@ export function ApiHealthCheck({ children }: ApiHealthCheckProps) {
       }
 
       // Try to reach the health endpoint with a timeout
-      const response = await axios.get(`${apiBaseUrl}/api/${apiVersion}/health`, {
+      const response = await axios.get(`${apiBaseUrl}/api/${apiVersion}/health/status`, {
         timeout: 5000,
         validateStatus: (status) => status < 500, // Accept any non-500 status
       })
