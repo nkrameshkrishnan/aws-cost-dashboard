@@ -1,5 +1,6 @@
 import { ReactNode, createContext, useContext, useState } from 'react'
 import { Sidebar } from './Sidebar'
+import { BackendStatusBanner } from '../common/BackendStatusBanner'
 
 interface LayoutContextType {
   isSidebarCollapsed: boolean
@@ -24,14 +25,17 @@ export function Layout({ children }: LayoutProps) {
     <LayoutContext.Provider value={{ isSidebarCollapsed, setIsSidebarCollapsed }}>
       <div className="min-h-screen bg-gray-50">
         <Sidebar />
-        <main
+        <div
           className="transition-all duration-300 ease-in-out"
           style={{
             marginLeft: isSidebarCollapsed ? '4rem' : '16rem',
           }}
         >
-          {children}
-        </main>
+          <BackendStatusBanner />
+          <main>
+            {children}
+          </main>
+        </div>
       </div>
     </LayoutContext.Provider>
   )

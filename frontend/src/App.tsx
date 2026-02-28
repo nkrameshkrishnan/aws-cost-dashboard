@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/layout/Layout'
 import { LoadingPage } from './components/common/LoadingPage'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
-import { ApiHealthCheck } from './components/common/ApiHealthCheck'
 
 // Lazy load all page components for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -21,36 +20,34 @@ const Settings = lazy(() => import('./pages/Settings'))
 function App() {
   return (
     <ErrorBoundary>
-      <ApiHealthCheck>
-        <Suspense fallback={<LoadingPage message="Loading..." />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/*"
-              element={
-                <Layout>
-                  <Suspense fallback={<LoadingPage message="Loading page..." />}>
-                    <Routes>
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/aws-accounts" element={<AWSAccountsPage />} />
-                      <Route path="/budgets" element={<BudgetManagement />} />
-                      <Route path="/finops-audit" element={<FinOpsAudit />} />
-                      <Route path="/automation" element={<Automation />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/kpi" element={<KPIDashboard />} />
-                      <Route path="/unit-costs" element={<UnitCosts />} />
-                      <Route path="/rightsizing" element={<RightSizing />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                    </Routes>
-                  </Suspense>
-                </Layout>
-              }
-            />
-          </Routes>
-        </Suspense>
-      </ApiHealthCheck>
+      <Suspense fallback={<LoadingPage message="Loading..." />}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/*"
+            element={
+              <Layout>
+                <Suspense fallback={<LoadingPage message="Loading page..." />}>
+                  <Routes>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/aws-accounts" element={<AWSAccountsPage />} />
+                    <Route path="/budgets" element={<BudgetManagement />} />
+                    <Route path="/finops-audit" element={<FinOpsAudit />} />
+                    <Route path="/automation" element={<Automation />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/kpi" element={<KPIDashboard />} />
+                    <Route path="/unit-costs" element={<UnitCosts />} />
+                    <Route path="/rightsizing" element={<RightSizing />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  </Routes>
+                </Suspense>
+              </Layout>
+            }
+          />
+        </Routes>
+      </Suspense>
     </ErrorBoundary>
   )
 }
