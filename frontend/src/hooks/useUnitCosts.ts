@@ -1,31 +1,58 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  calculateUnitCosts,
-  getUnitCostTrend,
+  calculateUnitCostsAsync,
+  getUnitCostTrendAsync,
+  pollJobUntilComplete,
   getBusinessMetrics,
   createBusinessMetric,
-  UnitCost,
-  UnitCostTrend,
-  BusinessMetric
+  type UnitCost,
+  type UnitCostTrend,
+  type BusinessMetric
 } from '@/api/unitCosts'
 
-export const useUnitCosts = (profileName: string, startDate: string, endDate: string, region: string = 'us-east-2') => {
+const CACHE_TIME = 5 * 60 * 1000 // 5 minutes
+
+export function useUnitCosts(
+  profileName: string,
+  startDate: string,
+  endDate: string,
+  region: string = 'us-east-2'
+) {
   return useQuery<UnitCost>({
     queryKey: ['unitCosts', profileName, startDate, endDate, region],
-    queryFn: () => calculateUnitCosts(profileName, startDate, endDate, region),
+    queryFn: async () => {
+      const { job_id } = await calculateUnitCostsAsync(profileName, startDate, endDate, region)
+      return pollJobUntilComplete<UnitCost>(job_id)
+    },
     enabled: !!profileName && !!startDate && !!endDate && !!region,
+    retry: 1,
+    staleTime: CACHE_TIME,
   })
 }
 
-export const useUnitCostTrend = (profileName: string, metricType: string, months: number = 6, region: string = 'us-east-2') => {
+export function useUnitCostTrend(
+  profileName: string,
+  metricType: string,
+  months: number = 6,
+  region: string = 'us-east-2'
+) {
   return useQuery<UnitCostTrend>({
     queryKey: ['unitCostTrend', profileName, metricType, months, region],
-    queryFn: () => getUnitCostTrend(profileName, metricType, months, region),
+    queryFn: async () => {
+      const { job_id } = await getUnitCostTrendAsync(profileName, metricType, months, region)
+      return pollJobUntilComplete<UnitCostTrend>(job_id)
+    },
     enabled: !!profileName && !!metricType && !!region,
+    retry: 1,
+    staleTime: CACHE_TIME,
   })
 }
 
-export const useBusinessMetrics = (profileName: string, startDate: string, endDate: string) => {
+export function useBusinessMetrics(
+  profileName: string,
+  startDate: string,
+  endDate: string
+) {
   return useQuery<BusinessMetric[]>({
     queryKey: ['businessMetrics', profileName, startDate, endDate],
     queryFn: () => getBusinessMetrics(profileName, startDate, endDate),
@@ -33,7 +60,7 @@ export const useBusinessMetrics = (profileName: string, startDate: string, endDa
   })
 }
 
-export const useCreateBusinessMetric = () => {
+export function useCreateBusinessMetric() {
   const queryClient = useQueryClient()
 
   return useMutation({

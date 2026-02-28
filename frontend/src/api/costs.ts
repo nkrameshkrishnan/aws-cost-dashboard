@@ -23,6 +23,7 @@ export const costsApi = {
   ): Promise<CostSummary> => {
     const response = await api.get('/costs/summary', {
       params: { profile_name: profileName, start_date: startDate, end_date: endDate },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -37,6 +38,7 @@ export const costsApi = {
   ): Promise<DailyCostsResponse> => {
     const response = await api.get('/costs/daily', {
       params: { profile_name: profileName, start_date: startDate, end_date: endDate },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -57,6 +59,7 @@ export const costsApi = {
         end_date: endDate,
         top_n: topN,
       },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -70,6 +73,7 @@ export const costsApi = {
   ): Promise<CostTrendResponse> => {
     const response = await api.get('/costs/trend', {
       params: { profile_name: profileName, months },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -88,6 +92,7 @@ export const costsApi = {
         current_month_start: currentMonthStart,
         current_month_end: currentMonthEnd,
       },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -106,6 +111,7 @@ export const costsApi = {
         current_period_start: currentPeriodStart,
         current_period_end: currentPeriodEnd,
       },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -120,6 +126,7 @@ export const costsApi = {
   ): Promise<ForecastResponse> => {
     const response = await api.get('/costs/forecast', {
       params: { profile_name: profileName, days, granularity },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -131,6 +138,7 @@ export const costsApi = {
   getDashboardData: async (profileName: string): Promise<DashboardData> => {
     const response = await api.get('/costs/dashboard', {
       params: { profile_name: profileName },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },
@@ -156,6 +164,7 @@ export const costsApi = {
         region: filters?.region,
         account_id: filters?.account_id,
       },
+      timeout: 150000, // 150 seconds for AWS Cost Explorer API calls
     })
     return response.data
   },

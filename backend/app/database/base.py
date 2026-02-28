@@ -42,5 +42,6 @@ def init_db():
     from app.models.budget import Budget  # noqa: F401
     from app.models.teams_webhook import TeamsWebhook  # noqa: F401
     from app.models.business_metric import BusinessMetric  # noqa: F401
+    from app.models.async_job import AsyncJob  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
