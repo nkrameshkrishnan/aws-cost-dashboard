@@ -42,7 +42,7 @@ class Settings(BaseSettings):
         description="Path to AWS credentials file"
     )
     # LocalStack (local AWS mocking)
-    USE_LOCALSTACK: bool = True
+    USE_LOCALSTACK: bool = False
     LOCALSTACK_ENDPOINT_URL: str = "http://localstack:4566"
     AWS_ACCESS_KEY_ID: str = Field(default="test")
     AWS_SECRET_ACCESS_KEY: str = Field(default="test")
