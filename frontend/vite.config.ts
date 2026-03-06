@@ -5,9 +5,9 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Base path for GitHub Enterprise Pages deployment
-  // Format: /pages/{username}/{repository}/
-  base: '/pages/rameshkrishnan-narashimankrishnamurthy/aws-cost-dashboard/',
+    // Base path for GitHub Pages project site (username.github.io/<repo>/)
+    // Set to the repository name so assets are referenced under /aws-cost-dashboard/
+    base: '/aws-cost-dashboard/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
