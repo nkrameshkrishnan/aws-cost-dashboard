@@ -35,17 +35,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: str = ""
 
-    # AWS Configuration
-    AWS_DEFAULT_REGION: str = "us-east-1"
-    AWS_PROFILE_CONFIG_PATH: str = Field(
-        default="~/.aws/credentials",
-        description="Path to AWS credentials file"
-    )
-    # LocalStack (local AWS mocking)
-    USE_LOCALSTACK: bool = False
-    LOCALSTACK_ENDPOINT_URL: str = "http://localstack:4566"
-    AWS_ACCESS_KEY_ID: str = Field(default="test")
-    AWS_SECRET_ACCESS_KEY: str = Field(default="test")
+    # AWS CLI profile config path (credentials file)
+    AWS_PROFILE_CONFIG_PATH: str = "/root/.aws/credentials"
 
     # Export Settings
     EXPORT_S3_BUCKET: str = ""

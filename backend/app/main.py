@@ -24,6 +24,24 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
+# ASGI middleware to ensure Private Network Access header is present
+class PrivateNetworkMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        async def send_wrapper(message):
+            try:
+                if message.get('type') == 'http.response.start':
+                    headers = list(message.setdefault('headers', []))
+                    # Add header to allow Private Network Access from public origins
+                    headers.append((b'access-control-allow-private-network', b'true'))
+                    message['headers'] = headers
+            except Exception:
+                pass
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -118,6 +136,9 @@ async def health_check():
 # Include API routers
 from app.api.v1.router import api_router
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# Wrap app with PrivateNetworkMiddleware so the header is added even for preflight responses
+app = PrivateNetworkMiddleware(app)
 
 
 if __name__ == "__main__":
