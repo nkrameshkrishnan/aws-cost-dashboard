@@ -105,11 +105,11 @@ export function ForecastChart({ profileName }: ForecastChartProps) {
       const data = payload[0].payload
       const isHistorical = data.type === 'historical'
       return (
-        <div className="bg-white p-4 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-4 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900 mb-1">
             {format(parseISO(data.fullDate), 'EEEE, MMM dd, yyyy')}
           </p>
-          <p className={`text-lg font-bold ${isHistorical ? 'text-trendRed-700' : 'text-modernTeal-700'}`}>
+          <p className={`text-lg font-bold ${isHistorical ? 'text-brandRed-700' : 'text-modernTeal-700'}`}>
             ${(data.actualCost || data.forecastedCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <p className="text-xs text-gray-500 mt-1">
@@ -126,7 +126,7 @@ export function ForecastChart({ profileName }: ForecastChartProps) {
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-trendRed-700" />
+            <TrendingUp className="w-5 h-5 text-brandRed-700" />
             Cost Forecast: Historical vs Predicted
           </h3>
           <InfoModal
@@ -159,7 +159,7 @@ Important Notes:
         <div className="flex gap-6 text-sm text-gray-600">
           <div>
             <span className="font-medium">Last 30 Days Total:</span>{' '}
-            <span className="text-trendRed-700 font-bold">
+            <span className="text-brandRed-700 font-bold">
               ${historicalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>

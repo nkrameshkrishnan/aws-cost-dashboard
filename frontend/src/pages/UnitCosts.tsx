@@ -80,9 +80,9 @@ export function UnitCosts() {
     if (active && payload && payload.length) {
       const data = payload[0].payload
       return (
-        <div className="bg-white p-4 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-4 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900 mb-2">{data.date}</p>
-          <p className="text-lg text-trendRed-700 font-bold mb-1">
+          <p className="text-lg text-brandRed-700 font-bold mb-1">
             ${data.unit_cost?.toFixed(4)}
           </p>
           <p className="text-xs text-gray-500">Total Cost: ${data.total_cost?.toLocaleString()}</p>
@@ -112,7 +112,7 @@ export function UnitCosts() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <DollarSign className="w-8 h-8 text-trendRed-700" />
+              <DollarSign className="w-8 h-8 text-brandRed-700" />
               Unit Cost Metrics
             </h1>
             <p className="text-gray-600 mt-2">Track cost efficiency as your business scales</p>
@@ -122,7 +122,7 @@ export function UnitCosts() {
             <select
               value={selectedRegion}
               onChange={(e) => setSelectedRegion(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-trendRed-500 focus:border-trendRed-500 bg-white hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brandRed-500 focus:border-brandRed-500 bg-white hover:bg-gray-50 transition-colors"
               aria-label="Select AWS Region"
             >
               {AWS_REGIONS.map((region) => (
@@ -217,7 +217,7 @@ Best Practice: Your unit costs should grow slower than your business metrics (re
         <div className="card hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-600 text-sm font-medium">Cost per User</span>
-            <Users className="w-5 h-5 text-trendRed-700" />
+            <Users className="w-5 h-5 text-brandRed-700" />
           </div>
           {isLoading ? (
             <div className="py-4">
@@ -321,14 +321,14 @@ Best Practice: Your unit costs should grow slower than your business metrics (re
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-trendRed-700" />
+              <TrendingUp className="w-5 h-5 text-brandRed-700" />
               6-Month Unit Cost Trend
             </h3>
             <div className="flex items-center gap-3">
               <select
                 value={metricType}
                 onChange={(e) => setMetricType(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-trendRed-500 focus:border-trendRed-500"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brandRed-500 focus:border-brandRed-500"
                 aria-label="Select unit cost metric type"
               >
                 <option value="cost_per_user">Cost per User</option>
@@ -394,11 +394,11 @@ Best Practice: Your unit costs should grow slower than your business metrics (re
 
       {/* Total Cost Summary */}
       {unitCosts && (
-        <div className="card mt-8 bg-gradient-to-br from-trendRed-50 to-modernTeal-50 border border-trendRed-100">
+        <div className="card mt-8 bg-gradient-to-br from-brandRed-50 to-modernTeal-50 border border-brandRed-100">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Total AWS Cost</p>
-              <p className="text-3xl font-bold text-trendRed-700">
+              <p className="text-3xl font-bold text-brandRed-700">
                 ${unitCosts.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-gray-500 mt-1">

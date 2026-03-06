@@ -42,7 +42,7 @@ export function KPICard({ title, value, subtitle, trend, isLoading, icon, gradie
   }
 
   return (
-    <div className="card border-l-4 border-trendRed-700 animate-fade-in">
+    <div className="card border-l-4 border-brandRed-700 animate-fade-in">
       <div className="flex items-start justify-between mb-4">
         <h3 className="text-sm font-semibold text-modernGray-600 uppercase tracking-wide">{title}</h3>
         <div className={`p-2.5 rounded-card bg-gradient-to-br ${gradientClass} text-white shadow-md`}>

@@ -264,7 +264,7 @@ For each recommendation:
 - ✅ Comprehensive InfoModal with usage guide
 
 **Design**:
-- Trend Micro color scheme (Red #D71920, Teal #00CDB9)
+- Primary brand color scheme (Red #D71920, Teal #00CDB9)
 - Responsive grid layout
 - Interactive trend chart with custom tooltips
 - Gradient cards for visual hierarchy

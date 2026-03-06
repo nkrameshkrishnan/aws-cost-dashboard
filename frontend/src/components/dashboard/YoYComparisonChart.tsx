@@ -69,9 +69,9 @@ export function YoYComparisonChart({ profileName }: YoYComparisonChartProps) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-4 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-4 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900 mb-1">{payload[0].payload.name}</p>
-          <p className="text-lg text-trendRed-700 font-bold">
+          <p className="text-lg text-brandRed-700 font-bold">
             ${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
@@ -87,8 +87,8 @@ export function YoYComparisonChart({ profileName }: YoYComparisonChartProps) {
   return (
     <div className="h-full">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-trendRed-700" />
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-brandRed-700" />
           Year-over-Year Comparison
         </h3>
         <div className="flex items-center gap-2">

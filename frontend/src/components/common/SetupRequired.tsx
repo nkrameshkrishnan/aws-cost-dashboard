@@ -146,7 +146,7 @@ npm run build
             Retry Connection
           </button>
           <a
-            href="https://dsgithub.trendmicro.com/rameshkrishnan-narashimankrishnamurthy/aws-cost-dashboard"
+            href="https://github.com/rameshkrishnan-narashimankrishnamurthy/aws-cost-dashboard"
             target="_blank"
             rel="noopener noreferrer"
             className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-center"

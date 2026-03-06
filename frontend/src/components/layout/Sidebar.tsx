@@ -37,7 +37,7 @@ export function Sidebar() {
       name: 'KPI Dashboard',
       icon: Target,
       path: '/kpi',
-      color: 'text-trendRed-700 hover:bg-white',
+      color: 'text-brandRed-700 hover:bg-white',
     },
     {
       name: 'Unit Costs',
@@ -55,7 +55,7 @@ export function Sidebar() {
       name: 'FinOps Audit',
       icon: Search,
       path: '/finops-audit',
-      color: 'text-trendRed-700 hover:bg-white',
+      color: 'text-brandRed-700 hover:bg-white',
     },
     {
       name: 'Automation',
@@ -98,13 +98,13 @@ export function Sidebar() {
         {!isCollapsed && (
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-8 h-8 bg-gradient-to-br from-trendRed-600 to-trendRed-800 rounded-lg flex items-center justify-center shadow-md">
+              <div className="w-8 h-8 bg-gradient-to-br from-brandRed-600 to-brandRed-800 rounded-lg flex items-center justify-center shadow-md">
                 <span className="text-white font-bold text-sm">AC</span>
               </div>
-              <div className="absolute -left-1 top-1 w-1.5 h-6 bg-trendRed-700 rounded-r"></div>
+              <div className="absolute -left-1 top-1 w-1.5 h-6 bg-brandRed-700 rounded-r"></div>
             </div>
             <div>
-              <h1 className="font-bold text-trendRed-700 text-sm tracking-tight">AWS Cost</h1>
+              <h1 className="font-bold text-brandRed-700 text-sm tracking-tight">AWS Cost</h1>
               <p className="text-xs text-modernGray-600">Dashboard</p>
             </div>
           </div>
@@ -137,7 +137,7 @@ export function Sidebar() {
                   onClick={() => navigate(item.path)}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-card transition-all duration-200 ${
                     active
-                      ? 'bg-white border-l-2 border-trendRed-700 text-trendRed-700 font-semibold shadow-md translate-x-1'
+                      ? 'bg-white border-l-2 border-brandRed-700 text-brandRed-700 font-semibold shadow-md translate-x-1'
                       : `${item.color} border-l-2 border-transparent hover:translate-x-1`
                   } ${isCollapsed ? 'justify-center' : ''} hover:shadow-md`}
                   title={isCollapsed ? item.name : ''}

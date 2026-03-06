@@ -45,7 +45,7 @@ export function InfoModal({ content, variant = 'teal' }: InfoModalProps) {
     }
   }, [isOpen])
 
-  const iconColorClass = 'text-gray-400 hover:text-trendRed-700'
+  const iconColorClass = 'text-gray-400 hover:text-brandRed-700'
 
   const modalRoot = document.getElementById('modal-root')
   if (!modalRoot) {
@@ -73,10 +73,10 @@ export function InfoModal({ content, variant = 'teal' }: InfoModalProps) {
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-trendRed-50 to-modernTeal-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brandRed-50 to-modernTeal-50">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${variant === 'teal' ? 'bg-modernTeal-100' : 'bg-trendRed-100'}`}>
-              <Info className={`w-5 h-5 ${variant === 'teal' ? 'text-modernTeal-700' : 'text-trendRed-700'}`} />
+              <div className={`p-2 rounded-lg ${variant === 'teal' ? 'bg-modernTeal-100' : 'bg-brandRed-100'}`}>
+                <Info className={`w-5 h-5 ${variant === 'teal' ? 'text-modernTeal-700' : 'text-brandRed-700'}`} />
             </div>
             <h3 className="text-lg font-semibold text-gray-900">Information</h3>
           </div>
@@ -104,7 +104,7 @@ export function InfoModal({ content, variant = 'teal' }: InfoModalProps) {
           <button
             type="button"
             onClick={handleClose}
-            className="w-full py-2.5 px-4 rounded-button font-medium text-white transition-all bg-trendRed-700 hover:bg-trendRed-800 shadow-button hover:shadow-button-hover"
+            className="w-full py-2.5 px-4 rounded-button font-medium text-white transition-all bg-brandRed-700 hover:bg-brandRed-800 shadow-button hover:shadow-button-hover"
           >
             Got it
           </button>

@@ -175,10 +175,10 @@ export function DrillDownModal({
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-trendRed-50 to-modernTeal-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brandRed-50 to-modernTeal-50">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-trendRed-700" />
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-brandRed-700" />
               Cost Drill-Down Analysis
             </h3>
 
@@ -192,8 +192,8 @@ export function DrillDownModal({
                     onClick={() => handleBreadcrumbClick(index)}
                     className={`text-sm px-2 py-1 rounded transition-colors ${
                       index === currentLevel
-                        ? 'bg-trendRed-700 text-white font-medium shadow-button'
-                        : 'bg-white text-gray-600 hover:bg-trendRed-50 hover:text-trendRed-700'
+                        ? 'bg-brandRed-700 text-white font-medium shadow-button'
+                        : 'bg-white text-gray-600 hover:bg-brandRed-50 hover:text-brandRed-700'
                     }`}
                   >
                     {path.value || path.dimensionLabel}
@@ -216,7 +216,7 @@ export function DrillDownModal({
         <div className="px-6 py-6 overflow-y-auto max-h-[calc(85vh-200px)]">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-trendRed-700 animate-spin" />
+              <Loader2 className="w-8 h-8 text-brandRed-700 animate-spin" />
               <p className="text-gray-600 mt-4">Loading {currentPath.dimensionLabel.toLowerCase()}...</p>
             </div>
           ) : error ? (
@@ -228,11 +228,11 @@ export function DrillDownModal({
           ) : data && data.breakdown.length > 0 ? (
             <>
               {/* Summary */}
-              <div className="bg-gradient-to-br from-trendRed-50 to-modernTeal-50 rounded-lg p-4 mb-6 border border-trendRed-100">
+              <div className="bg-gradient-to-br from-brandRed-50 to-modernTeal-50 rounded-lg p-4 mb-6 border border-brandRed-100">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total Cost</p>
-                    <p className="text-2xl font-bold text-trendRed-700">{formatCurrency(data.total_cost)}</p>
+                    <p className="text-2xl font-bold text-brandRed-700">{formatCurrency(data.total_cost)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-600">Showing</p>
@@ -252,7 +252,7 @@ export function DrillDownModal({
                     onClick={() => canDrillDown && handleDrillDown(record.dimension_value)}
                     className={`w-full text-left p-4 rounded-lg border border-gray-200 transition-all ${
                       canDrillDown
-                        ? 'hover:border-trendRed-300 hover:shadow-card-hover hover:bg-trendRed-50/30 cursor-pointer'
+                        ? 'hover:border-brandRed-300 hover:shadow-card-hover hover:bg-brandRed-50/30 cursor-pointer'
                         : 'cursor-default'
                     }`}
                     disabled={!canDrillDown}
@@ -264,7 +264,7 @@ export function DrillDownModal({
                             {record.dimension_value}
                           </p>
                           {canDrillDown && (
-                            <ChevronRight className="w-4 h-4 text-trendRed-600 flex-shrink-0" />
+                            <ChevronRight className="w-4 h-4 text-brandRed-600 flex-shrink-0" />
                           )}
                         </div>
                         <div className="flex items-center gap-4 mt-1">
@@ -274,7 +274,7 @@ export function DrillDownModal({
                         </div>
                       </div>
                       <div className="text-right ml-4">
-                        <p className="text-lg font-semibold text-trendRed-700">
+                        <p className="text-lg font-semibold text-brandRed-700">
                           {formatCurrency(record.cost)}
                         </p>
                       </div>
@@ -284,7 +284,7 @@ export function DrillDownModal({
                     <div className="mt-3">
                       <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-trendRed-600 to-modernTeal-500 transition-all duration-500"
+                          className="h-full bg-gradient-to-r from-brandRed-600 to-modernTeal-500 transition-all duration-500"
                           style={{ width: `${Math.min(record.percentage, 100)}%` }}
                         />
                       </div>
@@ -301,7 +301,7 @@ export function DrillDownModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">
               {canDrillDown
@@ -311,7 +311,7 @@ export function DrillDownModal({
             <button
               type="button"
               onClick={onClose}
-              className="py-2.5 px-6 rounded-button font-medium text-white bg-trendRed-700 hover:bg-trendRed-800 shadow-button hover:shadow-button-hover transition-all"
+              className="py-2.5 px-6 rounded-button font-medium text-white bg-brandRed-700 hover:bg-brandRed-800 shadow-button hover:shadow-button-hover transition-all"
             >
               Close
             </button>

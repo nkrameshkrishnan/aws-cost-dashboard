@@ -46,14 +46,14 @@ const abbreviateServiceName = (serviceName: string): string => {
   return abbreviations[serviceName] || serviceName
 }
 
-// Color palette for the pie chart - Trend Micro theme colors
+// Color palette for the pie chart - Brand theme colors
 const COLORS = [
-  '#D71920', // Trend Micro Red (brand color)
+  '#D71920', // Primary Brand Red (brand color)
   '#00CDB9', // Modern Teal
   '#00CD87', // Modern Green
   '#FFCD00', // Modern Yellow
   '#FF1919', // Modern Red
-  '#E53935', // Trend Red 600
+  '#E53935', // Brand Red 600
   '#1F9B8E', // Modern Teal 700
   '#178F56', // Modern Green 700
   '#D1AA00', // Modern Yellow 700
@@ -120,12 +120,12 @@ export function ServiceBreakdownPie({
       const percentage = ((payload[0].value / data.total_cost) * 100).toFixed(1)
       const fullName = payload[0].payload.fullName
       return (
-        <div className="bg-white p-3 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-3 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900">{payload[0].name}</p>
           {fullName !== payload[0].name && (
             <p className="text-xs text-gray-500 mb-1">{fullName}</p>
           )}
-          <p className="text-base text-trendRed-700 font-bold">
+          <p className="text-base text-brandRed-700 font-bold">
             ${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <p className="text-xs text-modernTeal-700 font-medium">{percentage}% of total</p>

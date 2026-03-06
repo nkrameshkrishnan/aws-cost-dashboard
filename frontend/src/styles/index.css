@@ -66,9 +66,9 @@
 }
 
 @layer components {
-  /* Primary Button - Enhanced Trend Micro Style */
+  /* Primary Button - Brand Primary Style */
   .btn-primary {
-    @apply bg-trendRed-700 hover:bg-trendRed-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-300;
+    @apply bg-brandRed-700 hover:bg-brandRed-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-300;
     font-family: var(--font-body);
     letter-spacing: 0.01em;
     position: relative;
@@ -94,7 +94,7 @@
 
   /* Secondary Button */
   .btn-secondary {
-    @apply bg-white hover:bg-modernGray-50 text-trendRed-700 font-semibold py-3 px-6 rounded-lg border-2 border-trendRed-700 transition-all duration-300;
+    @apply bg-white hover:bg-modernGray-50 text-brandRed-700 font-semibold py-3 px-6 rounded-lg border-2 border-brandRed-700 transition-all duration-300;
   }
   .btn-secondary:hover {
     transform: translateY(-2px);
@@ -177,7 +177,7 @@
     background: linear-gradient(135deg, rgba(0, 205, 185, 0.03) 0%, rgba(255, 255, 255, 1) 100%);
   }
   .card-accent-primary {
-    @apply card-accent border-l-trendRed-700;
+    @apply card-accent border-l-brandRed-700;
     background: linear-gradient(135deg, rgba(215, 25, 32, 0.03) 0%, rgba(255, 255, 255, 1) 100%);
   }
 
@@ -191,7 +191,7 @@
     backdrop-filter: blur(5px);
   }
   .input:focus {
-    @apply border-trendRed-700;
+    @apply border-brandRed-700;
     box-shadow: 0 0 0 3px rgba(215, 25, 32, 0.1), 0 4px 12px rgba(0, 0, 0, 0.05);
     background: rgba(255, 255, 255, 1);
   }
@@ -362,7 +362,7 @@
 
 /* Link Styles */
 .link {
-  @apply text-trendRed-700 hover:text-trendRed-800 transition-colors duration-200;
+  @apply text-brandRed-700 hover:text-brandRed-800 transition-colors duration-200;
   font-family: var(--font-body);
   font-weight: 500;
   position: relative;
@@ -423,7 +423,7 @@
 
 .stat-value {
   font-family: var(--font-display);
-  @apply text-4xl font-bold text-trendRed-700;
+  @apply text-4xl font-bold text-brandRed-700;
   line-height: 1;
   margin-bottom: 0.5rem;
 }

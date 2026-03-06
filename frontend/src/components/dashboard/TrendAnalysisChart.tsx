@@ -84,9 +84,9 @@ export function TrendAnalysisChart({ profileName }: TrendAnalysisChartProps) {
     if (active && payload && payload.length) {
       const data = payload[0].payload
       return (
-        <div className="bg-white p-4 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-4 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900 mb-2">{data.month}</p>
-          <p className="text-lg text-trendRed-700 font-bold mb-1">
+          <p className="text-lg text-brandRed-700 font-bold mb-1">
             ${data.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           {data.momChange !== null && data.momChange !== undefined && (
@@ -116,7 +116,7 @@ export function TrendAnalysisChart({ profileName }: TrendAnalysisChartProps) {
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-trendRed-700" />
+            <TrendingUp className="w-5 h-5 text-brandRed-700" />
             12-Month Cost Trend Analysis
           </h3>
           <InfoModal

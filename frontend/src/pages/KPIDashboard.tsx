@@ -103,7 +103,7 @@ export function KPIDashboard() {
       </div>
 
       {/* View Mode Selector and Summary */}
-      <div className="card mb-8 border-l-4 border-trendRed-700">
+      <div className="card mb-8 border-l-4 border-brandRed-700">
         <div className="flex flex-col gap-4">
           {/* View Mode Toggle */}
           <div className="flex items-center justify-between">
@@ -113,7 +113,7 @@ export function KPIDashboard() {
                   onClick={() => setViewMode('account')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
                     viewMode === 'account'
-                      ? 'bg-white shadow-md text-trendRed-700 font-semibold'
+                      ? 'bg-white shadow-md text-brandRed-700 font-semibold'
                       : 'text-modernGray-600 hover:text-modernGray-900'
                   }`}
                 >
@@ -124,7 +124,7 @@ export function KPIDashboard() {
                   onClick={() => setViewMode('organization')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
                     viewMode === 'organization'
-                      ? 'bg-white shadow-md text-trendRed-700 font-semibold'
+                      ? 'bg-white shadow-md text-brandRed-700 font-semibold'
                       : 'text-modernGray-600 hover:text-modernGray-900'
                   }`}
                   disabled

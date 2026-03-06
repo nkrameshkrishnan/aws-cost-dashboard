@@ -327,7 +327,7 @@ export function Dashboard() {
           }
           subtitle="for this month"
           icon="trending"
-          gradient="from-trendRed-600 to-trendRed-800"
+          gradient="from-brandRed-600 to-brandRed-800"
           isLoading={loadingDashboard}
         />
       </div>
@@ -406,7 +406,7 @@ export function Dashboard() {
                     </div>
                   )}
                   {budgetSummary.budgets_at_critical > 0 && (
-                    <div className="flex items-center gap-1 px-3 py-1.5 bg-trendRed-100 text-trendRed-700 rounded-full shadow-sm">
+                    <div className="flex items-center gap-1 px-3 py-1.5 bg-brandRed-100 text-brandRed-700 rounded-full shadow-sm">
                       <TrendingUp className="w-4 h-4" />
                       <span className="text-xs font-semibold">{budgetSummary.budgets_at_critical} Critical</span>
                     </div>

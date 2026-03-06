@@ -102,7 +102,7 @@ export function Automation() {
   const getJobIcon = (jobName: string) => {
     if (jobName.includes('Budget')) return <AlertCircle className="w-5 h-5 text-modernYellow-600" />
     if (jobName.includes('Audit')) return <Settings className="w-5 h-5 text-modernTeal-600" />
-    return <Zap className="w-5 h-5 text-trendRed-700" />
+    return <Zap className="w-5 h-5 text-brandRed-700" />
   }
 
   return (
@@ -111,7 +111,7 @@ export function Automation() {
       <div className="mb-8 flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-modernGray-900 tracking-tight flex items-center gap-3">
-            <Zap className="w-8 h-8 text-trendRed-700" />
+            <Zap className="w-8 h-8 text-brandRed-700" />
             Automation
           </h1>
           <p className="text-modernGray-600 mt-2">Manage scheduled jobs and automated tasks</p>
@@ -155,10 +155,10 @@ export function Automation() {
             <p className="text-3xl font-bold text-modernGray-900">{statusData.total_jobs}</p>
           </div>
 
-          <div className="card border-l-4 border-l-trendRed-700">
+          <div className="card border-l-4 border-l-brandRed-700">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-trendRed-100 rounded-card">
-                <Play className="w-5 h-5 text-trendRed-700" />
+              <div className="p-2 bg-brandRed-100 rounded-card">
+                <Play className="w-5 h-5 text-brandRed-700" />
               </div>
               <h3 className="text-sm font-semibold text-modernGray-500 uppercase">Active Jobs</h3>
             </div>
@@ -171,7 +171,7 @@ export function Automation() {
       <div className="card">
         <div className="border-b border-modernGray-200 px-6 py-4">
           <h2 className="text-xl font-bold text-modernGray-900 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-trendRed-700" />
+            <Clock className="w-5 h-5 text-brandRed-700" />
             Scheduled Jobs
           </h2>
         </div>
@@ -415,7 +415,7 @@ function CreateJobModal({
                 onClick={() => setJobType('budget')}
                 className={`p-4 border-2 rounded-card transition-all ${
                   jobType === 'budget'
-                    ? 'border-trendRed-700 bg-trendRed-50'
+                    ? 'border-brandRed-700 bg-brandRed-50'
                     : 'border-modernGray-200 hover:border-modernGray-300'
                 }`}
               >
@@ -429,7 +429,7 @@ function CreateJobModal({
                 onClick={() => setJobType('audit')}
                 className={`p-4 border-2 rounded-card transition-all ${
                   jobType === 'audit'
-                    ? 'border-trendRed-700 bg-trendRed-50'
+                    ? 'border-brandRed-700 bg-brandRed-50'
                     : 'border-modernGray-200 hover:border-modernGray-300'
                 }`}
               >
@@ -451,7 +451,7 @@ function CreateJobModal({
               onChange={(e) => setJobId(e.target.value)}
               placeholder={jobType === 'budget' ? 'budget-alerts-default' : 'audit-prod-daily'}
               required={jobType === 'audit'}
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
             />
             <p className="text-xs text-modernGray-500 mt-1">Unique identifier for this job</p>
           </div>
@@ -462,7 +462,7 @@ function CreateJobModal({
             <select
               value={cronExpression}
               onChange={(e) => setCronExpression(e.target.value)}
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent mb-2"
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent mb-2"
             >
               {cronPresets.map((preset) => (
                 <option key={preset.value} value={preset.value}>
@@ -477,7 +477,7 @@ function CreateJobModal({
                 type="text"
                 placeholder="0 2 * * *"
                 onChange={(e) => setCronExpression(e.target.value)}
-                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
               />
             )}
 
@@ -518,7 +518,7 @@ function CreateJobModal({
                             setAuditTypes(auditTypes.filter((t) => t !== type))
                           }
                         }}
-                        className="rounded text-trendRed-600 focus:ring-trendRed-500"
+                        className="rounded text-brandRed-600 focus:ring-brandRed-500"
                       />
                       <span className="text-modernGray-700">{type}</span>
                     </label>
@@ -532,7 +532,7 @@ function CreateJobModal({
                     type="checkbox"
                     checked={sendNotification}
                     onChange={(e) => setSendNotification(e.target.checked)}
-                    className="rounded text-trendRed-600 focus:ring-trendRed-500"
+                    className="rounded text-brandRed-600 focus:ring-brandRed-500"
                   />
                   <span className="text-sm font-medium text-modernGray-700">
                     Send Teams notification when audit completes

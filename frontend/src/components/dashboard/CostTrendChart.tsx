@@ -57,11 +57,11 @@ export function CostTrendChart({ profileName, startDate, endDate }: CostTrendCha
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-4 border border-trendRed-200 rounded-lg shadow-xl">
+        <div className="bg-white p-4 border border-brandRed-200 rounded-lg shadow-xl">
           <p className="text-sm font-semibold text-gray-900 mb-1">
             {format(parseISO(payload[0].payload.fullDate), 'EEEE, MMM dd, yyyy')}
           </p>
-          <p className="text-lg text-trendRed-700 font-bold">
+          <p className="text-lg text-brandRed-700 font-bold">
             ${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>

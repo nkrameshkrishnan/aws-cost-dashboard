@@ -278,7 +278,7 @@ export function Analytics() {
         <div className="card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-600 text-sm">Historical Data Points</span>
-            <Activity className="w-5 h-5 text-trendRed-700" />
+            <Activity className="w-5 h-5 text-brandRed-700" />
           </div>
           <div className="text-2xl font-bold text-gray-900">{historicalData.length}</div>
           <div className="text-sm text-gray-500 mt-1">Last 90 days</div>
@@ -370,9 +370,9 @@ Comparison Features:
           <div>
             {/* Forecast Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="p-4 bg-gradient-to-br from-trendRed-50 to-modernTeal-50 rounded-lg border border-trendRed-200">
+              <div className="p-4 bg-gradient-to-br from-brandRed-50 to-modernTeal-50 rounded-lg border border-brandRed-200">
                 <div className="text-sm text-gray-600 mb-1">Forecast Method</div>
-                <div className="text-lg font-bold text-trendRed-700">
+                <div className="text-lg font-bold text-brandRed-700">
                   {awsForecast.data.forecast_method === 'aws_api' ? '🤖 AWS ML Model' : '📊 Statistical Fallback'}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">

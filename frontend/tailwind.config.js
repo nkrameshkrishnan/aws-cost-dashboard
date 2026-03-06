@@ -7,8 +7,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Trend Micro Red - Primary Brand Color
-        trendRed: {
+        // Primary Brand Red - Primary brand color
+        brandRed: {
           50: '#FFEBEE',
           100: '#FFCDD2',
           200: '#EF9A9A',
@@ -16,7 +16,7 @@ export default {
           400: '#EF5350',
           500: '#F44336',
           600: '#E53935',
-          700: '#D71920', // Brand color
+          700: '#D71920',
           800: '#C62828',
           900: '#B71C1C',
         },

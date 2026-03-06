@@ -149,7 +149,7 @@ export function RightSizing() {
   const getResourceTypeIcon = (type: string) => {
     switch (type) {
       case 'ec2_instance':
-        return <Server className="w-5 h-5 text-trendRed-700" />
+        return <Server className="w-5 h-5 text-brandRed-700" />
       case 'ebs_volume':
         return <HardDrive className="w-5 h-5 text-modernTeal-700" />
       case 'lambda_function':
@@ -209,7 +209,7 @@ export function RightSizing() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <TrendingUp className="w-8 h-8 text-trendRed-700" />
+            <TrendingUp className="w-8 h-8 text-brandRed-700" />
             Right-Sizing Recommendations
           </h1>
           <p className="text-gray-600 mt-2">AWS Compute Optimizer insights for cost savings</p>
@@ -318,12 +318,12 @@ Best Practice: Start with recommendations that have low performance risk and hig
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Savings */}
-          <div className="card bg-gradient-to-br from-trendRed-50 to-modernTeal-50 border border-trendRed-100">
+          <div className="card bg-gradient-to-br from-brandRed-50 to-modernTeal-50 border border-brandRed-100">
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-700 text-sm font-medium">Potential Monthly Savings</span>
-              <DollarSign className="w-6 h-6 text-trendRed-700" />
+              <DollarSign className="w-6 h-6 text-brandRed-700" />
             </div>
-            <div className="text-3xl font-bold text-trendRed-700">
+            <div className="text-3xl font-bold text-brandRed-700">
               ${summary.total_potential_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-600 mt-1">
@@ -335,7 +335,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
           <div className="card hover:shadow-card-hover transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-600 text-sm font-medium">EC2 Instances</span>
-              <Server className="w-5 h-5 text-trendRed-700" />
+              <Server className="w-5 h-5 text-brandRed-700" />
             </div>
             <div className="text-2xl font-bold text-gray-900">{summary.total_ec2_recommendations}</div>
             <div className="text-xs text-gray-500 mt-1">Instance recommendations</div>
@@ -445,7 +445,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
                 aria-label="Filter by resource type"
                 value={resourceTypeFilter}
                 onChange={(e) => setResourceTypeFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-trendRed-500 focus:border-trendRed-500"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brandRed-500 focus:border-brandRed-500"
               >
                 <option value="">All Resource Types</option>
                 <option value="ec2_instance">EC2 Instances</option>
@@ -459,7 +459,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
                 aria-label="Filter by finding type"
                 value={findingFilter}
                 onChange={(e) => setFindingFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-trendRed-500 focus:border-trendRed-500"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brandRed-500 focus:border-brandRed-500"
               >
                 <option value="">All Findings</option>
                 <option value="overprovisioned">Overprovisioned</option>

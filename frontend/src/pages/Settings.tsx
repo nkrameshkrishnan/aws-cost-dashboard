@@ -91,54 +91,54 @@ export default function Settings() {
           </button>
         </div>
 
-        {isLoading ? (
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
           <div className="py-8">
             <LoadingSpinner size="md" text="Loading webhooks..." />
           </div>
         ) : webhooks && webhooks.length > 0 ? (
           <div className="space-y-4">
-            {webhooks.map((webhook) => (
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
               <div
                 key={webhook.id}
                 className="border border-modernGray-200 rounded-card p-4 hover:border-modernGray-300 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent font-mono text-sm"
                       <h3 className="text-lg font-semibold text-modernGray-900">{webhook.name}</h3>
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded ${
                           webhook.is_active
                             ? 'bg-modernGreen-100 text-modernGreen-800'
-                            : 'bg-modernGray-100 text-modernGray-600'
+              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
                         }`}
                       >
                         {webhook.is_active ? 'Active' : 'Inactive'}
                       </span>
                       <span className="px-2 py-1 text-xs font-medium rounded bg-modernTeal-100 text-modernTeal-800">
                         {webhook.webhook_type === 'teams' ? 'Teams' : 'Power Automate'}
-                      </span>
+              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                     </div>
                     {webhook.description && (
                       <p className="text-sm text-modernGray-600 mb-3">{webhook.description}</p>
                     )}
 
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
+              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                         <span className="font-medium text-modernGray-700">Notifications:</span>
                         <ul className="mt-1 space-y-1 text-modernGray-600">
                           {webhook.send_budget_alerts && <li>• Budget alerts (≥{webhook.budget_threshold_percentage}%)</li>}
                           {webhook.send_cost_summaries && <li>• Cost summaries</li>}
                           {webhook.send_audit_reports && <li>• Audit reports</li>}
                           {!webhook.send_budget_alerts && !webhook.send_cost_summaries && !webhook.send_audit_reports && (
-                            <li className="text-modernGray-400">No notifications enabled</li>
+              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                           )}
                         </ul>
                       </div>
                       <div>
                         <span className="font-medium text-modernGray-700">Last sent:</span>
                         <p className="mt-1 text-modernGray-600">
-                          {webhook.last_sent_at
+              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                             ? new Date(webhook.last_sent_at).toLocaleString()
                             : 'Never'}
                         </p>
@@ -375,7 +375,7 @@ function WebhookModal({
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
                 placeholder="Production Alerts"
               />
             </div>
@@ -389,7 +389,7 @@ function WebhookModal({
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
                 placeholder="Webhook for production environment cost alerts"
               />
             </div>
@@ -404,7 +404,7 @@ function WebhookModal({
                 required
                 value={formData.webhook_url}
                 onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
-                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent font-mono text-sm"
+                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent font-mono text-sm"
                 placeholder="https://outlook.office.com/webhook/..."
               />
               <p className="mt-1 text-xs text-modernGray-500">
@@ -423,7 +423,7 @@ function WebhookModal({
                 id="webhook_type"
                 value={formData.webhook_type}
                 onChange={(e) => setFormData({ ...formData, webhook_type: e.target.value as 'teams' | 'power_automate' })}
-                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-trendRed-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
               >
                 <option value="teams">Microsoft Teams (Incoming Webhook)</option>
                 <option value="power_automate">Power Automate (HTTP Workflow)</option>
@@ -442,7 +442,7 @@ function WebhookModal({
                 id="is_active"
                 checked={formData.is_active}
                 onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="h-4 w-4 text-trendRed-600 focus:ring-trendRed-500 border-modernGray-300 rounded"
+                className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
               />
               <label htmlFor="is_active" className="ml-2 block text-sm text-modernGray-700">
                 Active (enable notifications)
@@ -461,7 +461,7 @@ function WebhookModal({
                     id="send_budget_alerts"
                     checked={formData.send_budget_alerts}
                     onChange={(e) => setFormData({ ...formData, send_budget_alerts: e.target.checked })}
-                    className="h-4 w-4 text-trendRed-600 focus:ring-trendRed-500 border-modernGray-300 rounded"
+                    className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                   />
                   <label htmlFor="send_budget_alerts" className="ml-2 block text-sm text-modernGray-700">
                     Budget threshold alerts
@@ -493,7 +493,7 @@ function WebhookModal({
                     id="send_cost_summaries"
                     checked={formData.send_cost_summaries}
                     onChange={(e) => setFormData({ ...formData, send_cost_summaries: e.target.checked })}
-                    className="h-4 w-4 text-trendRed-600 focus:ring-trendRed-500 border-modernGray-300 rounded"
+                    className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                   />
                   <label htmlFor="send_cost_summaries" className="ml-2 block text-sm text-gray-700">
                     Daily/weekly cost summaries
@@ -506,7 +506,7 @@ function WebhookModal({
                     id="send_audit_reports"
                     checked={formData.send_audit_reports}
                     onChange={(e) => setFormData({ ...formData, send_audit_reports: e.target.checked })}
-                    className="h-4 w-4 text-trendRed-600 focus:ring-trendRed-500 border-modernGray-300 rounded"
+                    className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                   />
                   <label htmlFor="send_audit_reports" className="ml-2 block text-sm text-gray-700">
                     FinOps audit reports
