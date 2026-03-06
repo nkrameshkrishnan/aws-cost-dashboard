@@ -21,7 +21,8 @@ jobs:
 
       - name: Install dependencies (frontend)
         working-directory: frontend
-        run: npm ci
+        # Prefer `npm ci` when a lockfile exists; fall back to `npm install` otherwise
+        run: npm ci || npm install
 
       - name: Build frontend
         working-directory: frontend
