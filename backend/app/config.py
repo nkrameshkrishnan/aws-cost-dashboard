@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # API Configuration
     API_V1_PREFIX: str = "/api/v1"
     # Add production GitHub Pages and common localhost dev origins
-    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,https://nkrameshkrishnan.github.io/aws-cost-dashboard"
+    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,https://nkrameshkrishnan.github.io"
 
     # Database Configuration
     DATABASE_URL: str = Field(
