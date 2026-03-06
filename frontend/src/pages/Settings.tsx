@@ -40,6 +40,55 @@ export default function Settings() {
   // Test webhook mutation
   const testMutation = useMutation({
     mutationFn: (request: { webhook_url: string; webhook_type: 'teams' | 'power_automate' }) =>
+      teamsApi.testWebhook(request)
+  })
+
+  const handleDelete = async (id: number, name: string) => {
+    if (window.confirm(`Are you sure you want to delete webhook "${name}"?`)) {
+      await deleteMutation.mutateAsync(id)
+    }
+  }
+
+  const handleTest = async (webhook: TeamsWebhook) => {
+    const result = await testMutation.mutateAsync({
+      webhook_url: webhook.webhook_url,
+      webhook_type: webhook.webhook_type
+    })
+    if (result.success) {
+      const destination = webhook.webhook_type === 'teams' ? 'Teams channel' : 'Power Automate workflow'
+      alert(`✅ Test notification sent! Check your ${destination}.`)
+    } else {
+      alert('❌ Failed to send test notification. Please check your webhook URL.')
+    }
+  }
+
+  const handleS3ConfigSave = () => {
+    localStorage.setItem('s3ExportEnabled', s3Enabled.toString())
+    localStorage.setItem('s3ExportBucket', s3BucketName)
+    setS3SaveSuccess(true)
+    setTimeout(() => setS3SaveSuccess(false), 3000)
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-modernGray-900 tracking-tight">Settings</h1>
+        <p className="text-modernGray-600 mt-2">Manage application configuration and integrations</p>
+      </div>
+
+      {/* Microsoft Teams Section */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-semibold text-modernGray-900 mb-1">Microsoft Teams Integration</h2>
+            <p className="text-sm text-modernGray-600">Configure webhooks to send notifications to Teams channels</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary"
+          >
+            + Add Webhook
+          </button>
         </div>
 
         {isLoading ? (
@@ -88,55 +137,6 @@ export default function Settings() {
                       <p className="mt-1 text-modernGray-600">
                         {webhook.last_sent_at ? new Date(webhook.last_sent_at).toLocaleString() : 'Never'}
                       </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => handleTest(webhook)}
-                      disabled={testMutation.isPending}
-                      className="btn-secondary"
-                    >
-                      Test
-                    </button>
-                    <button
-                      onClick={() => setEditingWebhook(webhook)}
-                      className="btn-secondary"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(webhook.id, webhook.name)}
-                      disabled={deleteMutation.isPending}
-                      className="px-3 py-1 text-sm border border-modernRed-300 text-modernRed-600 rounded-button hover:bg-modernRed-50 transition-colors disabled:opacity-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
-                        <span className="font-medium text-modernGray-700">Notifications:</span>
-                        <ul className="mt-1 space-y-1 text-modernGray-600">
-                          {webhook.send_budget_alerts && <li>• Budget alerts (≥{webhook.budget_threshold_percentage}%)</li>}
-                          {webhook.send_cost_summaries && <li>• Cost summaries</li>}
-                          {webhook.send_audit_reports && <li>• Audit reports</li>}
-                          {!webhook.send_budget_alerts && !webhook.send_cost_summaries && !webhook.send_audit_reports && (
-              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
-                          )}
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="font-medium text-modernGray-700">Last sent:</span>
-                        <p className="mt-1 text-modernGray-600">
-              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
-                            ? new Date(webhook.last_sent_at).toLocaleString()
-                            : 'Never'}
-                        </p>
-                      </div>
                     </div>
                   </div>
 
