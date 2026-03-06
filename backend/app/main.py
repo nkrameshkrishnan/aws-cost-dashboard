@@ -43,6 +43,27 @@ app.add_middleware(
 logger.info("Performance monitoring middleware enabled")
 
 
+# Private Network Access (PNA) header middleware
+@app.middleware("http")
+async def add_private_network_header(request, call_next):
+    """Ensure API responses (including CORS preflight) include the
+    Access-Control-Allow-Private-Network header required by browsers
+    when a public origin (e.g. GitHub Pages) attempts to call a
+    loopback/localhost service.
+    """
+    # Let downstream middleware (including CORSMiddleware) handle the request
+    response = await call_next(request)
+
+    # Add the PNA header to all responses
+    try:
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    except Exception:
+        # If response.headers is not dict-like, ignore silently
+        pass
+
+    return response
+
+
 @app.on_event("startup")
 async def startup_event():
     """Run tasks on application startup."""
