@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     # API Configuration
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000"
+    # Add production GitHub Pages and common localhost dev origins
+    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,https://nkrameshkrishnan.github.io/aws-cost-dashboard"
 
     # Database Configuration
     DATABASE_URL: str = Field(
@@ -40,6 +41,11 @@ class Settings(BaseSettings):
         default="~/.aws/credentials",
         description="Path to AWS credentials file"
     )
+    # LocalStack (local AWS mocking)
+    USE_LOCALSTACK: bool = True
+    LOCALSTACK_ENDPOINT_URL: str = "http://localstack:4566"
+    AWS_ACCESS_KEY_ID: str = Field(default="test")
+    AWS_SECRET_ACCESS_KEY: str = Field(default="test")
 
     # Export Settings
     EXPORT_S3_BUCKET: str = ""
