@@ -40,90 +40,84 @@ export default function Settings() {
   // Test webhook mutation
   const testMutation = useMutation({
     mutationFn: (request: { webhook_url: string; webhook_type: 'teams' | 'power_automate' }) =>
-      teamsApi.testWebhook(request)
-  })
-
-  const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete webhook "${name}"?`)) {
-      await deleteMutation.mutateAsync(id)
-    }
-  }
-
-  const handleTest = async (webhook: TeamsWebhook) => {
-    const result = await testMutation.mutateAsync({
-      webhook_url: webhook.webhook_url,
-      webhook_type: webhook.webhook_type
-    })
-    if (result.success) {
-      const destination = webhook.webhook_type === 'teams' ? 'Teams channel' : 'Power Automate workflow'
-      alert(`✅ Test notification sent! Check your ${destination}.`)
-    } else {
-      alert('❌ Failed to send test notification. Please check your webhook URL.')
-    }
-  }
-
-  const handleS3ConfigSave = () => {
-    localStorage.setItem('s3ExportEnabled', s3Enabled.toString())
-    localStorage.setItem('s3ExportBucket', s3BucketName)
-    setS3SaveSuccess(true)
-    setTimeout(() => setS3SaveSuccess(false), 3000)
-  }
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-modernGray-900 tracking-tight">Settings</h1>
-        <p className="text-modernGray-600 mt-2">Manage application configuration and integrations</p>
-      </div>
-
-      {/* Microsoft Teams Section */}
-      <div className="card mb-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-modernGray-900 mb-1">Microsoft Teams Integration</h2>
-            <p className="text-sm text-modernGray-600">Configure webhooks to send notifications to Teams channels</p>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary"
-          >
-            + Add Webhook
-          </button>
         </div>
 
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
+        {isLoading ? (
           <div className="py-8">
             <LoadingSpinner size="md" text="Loading webhooks..." />
           </div>
         ) : webhooks && webhooks.length > 0 ? (
           <div className="space-y-4">
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
+            {webhooks.map((webhook) => (
               <div
                 key={webhook.id}
                 className="border border-modernGray-200 rounded-card p-4 hover:border-modernGray-300 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent font-mono text-sm"
-                      <h3 className="text-lg font-semibold text-modernGray-900">{webhook.name}</h3>
+                    <h3 className="text-lg font-semibold text-modernGray-900">{webhook.name}</h3>
+                    <div className="mt-2 flex items-center gap-2">
                       <span
-                        className={`px-2 py-1 text-xs font-medium rounded ${
-                          webhook.is_active
-                            ? 'bg-modernGreen-100 text-modernGreen-800'
-              className="w-full px-3 py-2 border border-modernGray-300 rounded-button focus:ring-2 focus:ring-brandRed-500 focus:border-transparent"
-                        }`}
+                        className={`px-2 py-1 text-xs font-medium rounded ${webhook.is_active ? 'bg-modernGreen-100 text-modernGreen-800' : 'bg-modernGray-100 text-modernGray-700'}`}
                       >
                         {webhook.is_active ? 'Active' : 'Inactive'}
                       </span>
                       <span className="px-2 py-1 text-xs font-medium rounded bg-modernTeal-100 text-modernTeal-800">
                         {webhook.webhook_type === 'teams' ? 'Teams' : 'Power Automate'}
-              className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
+                      </span>
                     </div>
+
                     {webhook.description && (
-                      <p className="text-sm text-modernGray-600 mb-3">{webhook.description}</p>
+                      <p className="text-sm text-modernGray-600 mb-3 mt-2">{webhook.description}</p>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-2 gap-4 text-sm mt-2">
+                      <span className="font-medium text-modernGray-700">Notifications:</span>
+                      <ul className="mt-1 space-y-1 text-modernGray-600">
+                        {webhook.send_budget_alerts && <li>• Budget alerts (≥{webhook.budget_threshold_percentage}%)</li>}
+                        {webhook.send_cost_summaries && <li>• Cost summaries</li>}
+                        {webhook.send_audit_reports && <li>• Audit reports</li>}
+                        {!webhook.send_budget_alerts && !webhook.send_cost_summaries && !webhook.send_audit_reports && (
+                          <li>• None</li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="mt-3">
+                      <span className="font-medium text-modernGray-700">Last sent:</span>
+                      <p className="mt-1 text-modernGray-600">
+                        {webhook.last_sent_at ? new Date(webhook.last_sent_at).toLocaleString() : 'Never'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => handleTest(webhook)}
+                      disabled={testMutation.isPending}
+                      className="btn-secondary"
+                    >
+                      Test
+                    </button>
+                    <button
+                      onClick={() => setEditingWebhook(webhook)}
+                      className="btn-secondary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(webhook.id, webhook.name)}
+                      disabled={deleteMutation.isPending}
+                      className="px-3 py-1 text-sm border border-modernRed-300 text-modernRed-600 rounded-button hover:bg-modernRed-50 transition-colors disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
               className="h-4 w-4 text-brandRed-600 focus:ring-brandRed-500 border-modernGray-300 rounded"
                         <span className="font-medium text-modernGray-700">Notifications:</span>
                         <ul className="mt-1 space-y-1 text-modernGray-600">
