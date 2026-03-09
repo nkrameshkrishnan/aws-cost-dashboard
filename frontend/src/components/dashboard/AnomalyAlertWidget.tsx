@@ -96,7 +96,7 @@ export function AnomalyAlertWidget({ anomalies, isLoading }: AnomalyAlertWidgetP
               <p className="text-sm text-gray-600">{anomaly.description}</p>
             </div>
             <div className="text-right ml-4">
-              <div className="text-lg font-bold text-gray-900">${anomaly.cost.toFixed(2)}</div>
+              <div className="text-lg font-bold text-gray-900">${(anomaly.cost ?? 0).toFixed(2)}</div>
               {anomaly.percentage_change && (
                 <div className="text-sm text-red-600 font-semibold">
                   +{anomaly.percentage_change.toFixed(1)}%

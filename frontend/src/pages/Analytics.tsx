@@ -80,10 +80,12 @@ export function Analytics() {
   })
 
   // Prepare historical data for analytics
-  const historicalData = dailyCosts?.daily_costs?.map((item: any) => ({
-    date: item.date,
-    cost: item.cost,
-  })) || []
+  const historicalData = dailyCosts?.daily_costs
+    ?.filter((item: any) => item != null && item.cost != null)
+    .map((item: any) => ({
+      date: item.date,
+      cost: item.cost,
+    })) || []
 
   // Anomaly detection mutation
   const anomalyMutation = useMutation({
@@ -591,7 +593,7 @@ Default threshold of 2.5 standard deviations catches significant anomalies while
                           {format(parseISO(anomaly.date), 'MMM dd, yyyy')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ${anomaly.cost.toFixed(2)}
+                          ${(anomaly.cost ?? 0).toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span

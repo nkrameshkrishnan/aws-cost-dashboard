@@ -66,8 +66,9 @@ export function ForecastChart({ profileName }: ForecastChartProps) {
   // Combine historical and forecast data
   const combinedData: any[] = []
 
-  // Add historical data
+  // Add historical data (skip any null/undefined records)
   historicalData.daily_costs.forEach((record, index) => {
+    if (!record || record.cost == null || !record.date) return
     const isLastHistorical = index === historicalData.daily_costs.length - 1
     combinedData.push({
       date: format(parseISO(record.date), 'MMM dd'),

@@ -92,10 +92,12 @@ export function Dashboard() {
     staleTime: 10 * 60 * 1000, // 10 minutes
   })
 
-  const historicalData = dailyCostsForAnalytics?.daily_costs?.map((item: any) => ({
-    date: item.date,
-    cost: item.cost,
-  })) || []
+  const historicalData = dailyCostsForAnalytics?.daily_costs
+    ?.filter((item: any) => item != null && item.cost != null)
+    .map((item: any) => ({
+      date: item.date,
+      cost: item.cost,
+    })) || []
 
   // Analytics: Run forecast (7 days, ensemble method)
   const forecastMutation = useMutation({
