@@ -8,16 +8,23 @@ from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError
 
+from app.auditors.base import AuditorBase
+
 logger = logging.getLogger(__name__)
 
 
-class StepFunctionsAuditor:
+class StepFunctionsAuditor(AuditorBase):
     """Auditor for Step Functions state machines."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.sfn = session.client('stepfunctions', region_name=region)
+
+    def run(self, days: int = 30, **kwargs) -> dict:
+        """Run all Step Functions audit checks."""
+        return {
+            'unused_state_machines': self.audit_unused_state_machines(days=days),
+        }
 
     def audit_unused_state_machines(self, days: int = 30) -> List[Dict[str, Any]]:
         """

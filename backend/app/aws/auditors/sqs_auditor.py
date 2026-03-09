@@ -9,18 +9,25 @@ import boto3
 from botocore.exceptions import ClientError
 
 from app.schemas.audit import SQSUnusedQueue, SQSHighRetentionQueue
+from app.auditors.base import AuditorBase
 
 logger = logging.getLogger(__name__)
 
 
-class SQSAuditor:
+class SQSAuditor(AuditorBase):
     """Auditor for SQS queues."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.sqs = session.client('sqs', region_name=region)
         self.cloudwatch = session.client('cloudwatch', region_name=region)
+
+    def run(self, days: int = 30, **kwargs) -> dict:
+        """Run all SQS audit checks."""
+        return {
+            'unused_queues': self.audit_unused_queues(days=days),
+            'high_retention_queues': self.audit_high_retention_queues(),
+        }
 
     def audit_unused_queues(self, days: int = 30) -> List[SQSUnusedQueue]:
         """

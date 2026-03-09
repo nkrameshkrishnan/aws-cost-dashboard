@@ -9,18 +9,24 @@ import boto3
 from botocore.exceptions import ClientError
 
 from app.schemas.audit import SNSUnusedTopic
+from app.auditors.base import AuditorBase
 
 logger = logging.getLogger(__name__)
 
 
-class SNSAuditor:
+class SNSAuditor(AuditorBase):
     """Auditor for SNS topics."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.sns = session.client('sns', region_name=region)
         self.cloudwatch = session.client('cloudwatch', region_name=region)
+
+    def run(self, days: int = 30, **kwargs) -> dict:
+        """Run all SNS audit checks."""
+        return {
+            'unused_topics': self.audit_unused_topics(days=days),
+        }
 
     def audit_unused_topics(self, days: int = 30) -> List[SNSUnusedTopic]:
         """

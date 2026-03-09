@@ -8,16 +8,24 @@ from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError
 
+from app.auditors.base import AuditorBase
+
 logger = logging.getLogger(__name__)
 
 
-class GlueAuditor:
+class GlueAuditor(AuditorBase):
     """Auditor for AWS Glue crawlers and jobs."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.glue = session.client('glue', region_name=region)
+
+    def run(self, days: int = 30, **kwargs) -> dict:
+        """Run all Glue audit checks."""
+        return {
+            'unused_crawlers': self.audit_unused_crawlers(days=days),
+            'unused_jobs': self.audit_unused_jobs(days=days),
+        }
 
     def audit_unused_crawlers(self, days: int = 30) -> List[Dict[str, Any]]:
         """

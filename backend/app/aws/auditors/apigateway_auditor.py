@@ -9,18 +9,25 @@ import boto3
 from botocore.exceptions import ClientError
 
 from app.schemas.audit import APIGatewayUnusedAPI, APIGatewayNoCaching
+from app.auditors.base import AuditorBase
 
 logger = logging.getLogger(__name__)
 
 
-class APIGatewayAuditor:
+class APIGatewayAuditor(AuditorBase):
     """Auditor for API Gateway REST APIs."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.apigateway = session.client('apigateway', region_name=region)
         self.cloudwatch = session.client('cloudwatch', region_name=region)
+
+    def run(self, days: int = 30, **kwargs) -> dict:
+        """Run all API Gateway audit checks."""
+        return {
+            'unused_apis': self.audit_unused_apis(days=days),
+            'apis_without_caching': self.audit_apis_without_caching(),
+        }
 
     def audit_unused_apis(self, days: int = 30) -> List[APIGatewayUnusedAPI]:
         """

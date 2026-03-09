@@ -34,6 +34,132 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Shared helpers — all export routes funnel through these two functions so
+# the S3-or-stream decision is defined exactly once.
+# ---------------------------------------------------------------------------
+
+def _resolve_audit_results(
+    request: "ExportRequest",
+    job_id: Optional[str],
+    log_format: str,
+) -> FullAuditResults:
+    """Return FullAuditResults from request body or job storage, or raise HTTP 4xx."""
+    if request.audit_results:
+        logger.info(f"Using audit results from request body for {log_format} export")
+        return request.audit_results
+    if job_id:
+        job = job_storage.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Audit job {job_id} not found")
+        if job["status"] != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audit job is not completed yet (status: {job['status']})",
+            )
+        if not job.get("results"):
+            raise HTTPException(status_code=404, detail="Audit results not available")
+        logger.info(f"Using audit results from job {job_id} for {log_format} export")
+        return FullAuditResults.model_validate(job["results"])
+    raise HTTPException(
+        status_code=400,
+        detail="Either audit_results in request body or job_id query parameter must be provided",
+    )
+
+
+def _stream_or_upload(
+    file_bytes: bytes,
+    media_type: str,
+    file_name: str,
+    upload_to_s3: bool,
+    s3_bucket: Optional[str],
+    profile_name: str,
+    db: "DBSession",
+    s3_message: str = "File exported to S3 successfully",
+) -> "Response":
+    """
+    Return a StreamingResponse (file download) or an ExportResponse (S3 upload).
+
+    Uses the generic S3UploaderService.upload_report uploader.
+    For audit-specific uploads use _stream_or_upload_audit instead.
+    """
+    if upload_to_s3 and s3_bucket:
+        aws_session = db_session_manager.get_session(db, profile_name)
+        upload_result = S3UploaderService.upload_report(
+            file_content=file_bytes,
+            bucket_name=s3_bucket,
+            file_name=file_name,
+            aws_session=aws_session,
+            content_type=media_type,
+        )
+        if not upload_result["success"]:
+            raise HTTPException(
+                status_code=500, detail=upload_result.get("error", "S3 upload failed")
+            )
+        return ExportResponse(
+            success=True,
+            message=s3_message,
+            file_name=file_name,
+            file_size=len(file_bytes),
+            s3_url=upload_result.get("s3_url"),
+            s3_bucket=upload_result.get("s3_bucket"),
+            s3_key=upload_result.get("s3_key"),
+        )
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={file_name}"},
+    )
+
+
+def _stream_or_upload_audit(
+    file_bytes: bytes,
+    media_type: str,
+    file_name: str,
+    report_format: str,
+    account_name: str,
+    upload_to_s3: bool,
+    s3_bucket: Optional[str],
+    db: "DBSession",
+    s3_message: str = "Report uploaded to S3 successfully",
+) -> "Response":
+    """
+    Return a StreamingResponse or an ExportResponse for audit-specific S3 uploads.
+
+    Uses S3UploaderService.upload_audit_report (distinct from the generic uploader).
+    """
+    if upload_to_s3 and s3_bucket:
+        aws_session = db_session_manager.get_session(db, account_name)
+        upload_result = S3UploaderService.upload_audit_report(
+            file_content=file_bytes,
+            account_name=account_name,
+            report_format=report_format,
+            bucket_name=s3_bucket,
+            aws_session=aws_session,
+        )
+        if not upload_result["success"]:
+            raise HTTPException(
+                status_code=500, detail=upload_result.get("error", "S3 upload failed")
+            )
+        return ExportResponse(
+            success=True,
+            message=s3_message,
+            file_name=file_name,
+            s3_url=upload_result.get("s3_url"),
+            s3_bucket=upload_result.get("s3_bucket"),
+            s3_key=upload_result.get("s3_key"),
+        )
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={file_name}"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Request / response models
+# ---------------------------------------------------------------------------
+
 class ExportRequest(BaseModel):
     """Request body for exporting audit results."""
     audit_results: Optional[FullAuditResults] = None
@@ -69,70 +195,17 @@ async def export_audit_pdf(
         PDF file download or S3 upload confirmation
     """
     try:
-        # Get audit results from request body or job lookup
-        if request.audit_results:
-            audit_results = request.audit_results
-            logger.info(f"Using audit results from request body for PDF export")
-        elif job_id:
-            job = job_storage.get_job(job_id)
-            if not job:
-                raise HTTPException(status_code=404, detail=f"Audit job {job_id} not found")
-            if job['status'] != 'completed':
-                raise HTTPException(status_code=400, detail=f"Audit job is not completed yet (status: {job['status']})")
-            if not job.get('results'):
-                raise HTTPException(status_code=404, detail="Audit results not available")
-            audit_results = FullAuditResults.model_validate(job['results'])
-            logger.info(f"Using audit results from job {job_id} for PDF export")
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Either audit_results in request body or job_id query parameter must be provided"
-            )
-
-        # Generate PDF
-        pdf_generator = PDFReportGenerator()
-        pdf_bytes = pdf_generator.generate_audit_report(audit_results, include_charts=True)
-
-        # Generate file name
         from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_account_name = audit_results.account_name.replace(' ', '_').replace('/', '_')
-        file_name = f"finops_audit_{safe_account_name}_{timestamp}.pdf"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            # Get AWS session for the account
-            aws_session = db_session_manager.get_session(db, audit_results.account_name)
-
-            # Upload to S3
-            upload_result = S3UploaderService.upload_audit_report(
-                file_content=pdf_bytes,
-                account_name=audit_results.account_name,
-                report_format='pdf',
-                bucket_name=request.s3_bucket,
-                aws_session=aws_session
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message="PDF report uploaded to S3 successfully",
-                file_name=file_name,
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return PDF as download
-        pdf_stream = io.BytesIO(pdf_bytes)
-        return StreamingResponse(
-            pdf_stream,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        audit_results = _resolve_audit_results(request, job_id, "PDF")
+        pdf_bytes = PDFReportGenerator().generate_audit_report(audit_results, include_charts=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = audit_results.account_name.replace(" ", "_").replace("/", "_")
+        file_name = f"finops_audit_{safe_name}_{timestamp}.pdf"
+        return _stream_or_upload_audit(
+            pdf_bytes, "application/pdf", file_name, "pdf",
+            audit_results.account_name, request.upload_to_s3, request.s3_bucket, db,
+            s3_message="PDF report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -158,70 +231,18 @@ async def export_audit_excel(
         Excel file download or S3 upload confirmation
     """
     try:
-        # Get audit results from request body or job lookup
-        if request.audit_results:
-            audit_results = request.audit_results
-            logger.info(f"Using audit results from request body for Excel export")
-        elif job_id:
-            job = job_storage.get_job(job_id)
-            if not job:
-                raise HTTPException(status_code=404, detail=f"Audit job {job_id} not found")
-            if job['status'] != 'completed':
-                raise HTTPException(status_code=400, detail=f"Audit job is not completed yet (status: {job['status']})")
-            if not job.get('results'):
-                raise HTTPException(status_code=404, detail="Audit results not available")
-            audit_results = FullAuditResults.model_validate(job['results'])
-            logger.info(f"Using audit results from job {job_id} for Excel export")
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Either audit_results in request body or job_id query parameter must be provided"
-            )
-
-        # Generate Excel
-        excel_generator = ExcelReportGenerator()
-        excel_bytes = excel_generator.generate_audit_report(audit_results)
-
-        # Generate file name
         from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_account_name = audit_results.account_name.replace(' ', '_').replace('/', '_')
-        file_name = f"finops_audit_{safe_account_name}_{timestamp}.xlsx"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            # Get AWS session for the account
-            aws_session = db_session_manager.get_session(db, audit_results.account_name)
-
-            # Upload to S3
-            upload_result = S3UploaderService.upload_audit_report(
-                file_content=excel_bytes,
-                account_name=audit_results.account_name,
-                report_format='xlsx',
-                bucket_name=request.s3_bucket,
-                aws_session=aws_session
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message="Excel report uploaded to S3 successfully",
-                file_name=file_name,
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return Excel as download
-        excel_stream = io.BytesIO(excel_bytes)
-        return StreamingResponse(
-            excel_stream,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        audit_results = _resolve_audit_results(request, job_id, "Excel")
+        excel_bytes = ExcelReportGenerator().generate_audit_report(audit_results)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = audit_results.account_name.replace(" ", "_").replace("/", "_")
+        file_name = f"finops_audit_{safe_name}_{timestamp}.xlsx"
+        return _stream_or_upload_audit(
+            excel_bytes, _XLSX, file_name, "xlsx",
+            audit_results.account_name, request.upload_to_s3, request.s3_bucket, db,
+            s3_message="Excel report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -250,15 +271,10 @@ async def export_audit_csv(
         if not job_id:
             raise HTTPException(status_code=400, detail="job_id is required for CSV export")
 
-        job = job_storage.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Audit job {job_id} not found")
-        if job['status'] != 'completed':
-            raise HTTPException(status_code=400, detail=f"Audit job is not completed yet (status: {job['status']})")
-        if not job.get('results'):
-            raise HTTPException(status_code=404, detail="Audit results not available")
-
-        audit_results = FullAuditResults.model_validate(job['results'])
+        # Reuse the job-resolution helper via a thin shim (no request body for CSV)
+        class _NoBodyRequest:
+            audit_results = None
+        audit_results = _resolve_audit_results(_NoBodyRequest(), job_id, "CSV")
 
         import csv
 
@@ -342,64 +358,22 @@ async def export_daily_costs(
         CSV or JSON file download
     """
     try:
-        # Get daily costs data
-        daily_costs = DatabaseCostProcessor.get_daily_costs(
-            db,
-            request.profile_name,
-            request.start_date,
-            request.end_date
-        )
-        cost_data = {'daily_costs': daily_costs}
-
+        cost_data = {"daily_costs": DatabaseCostProcessor.get_daily_costs(
+            db, request.profile_name, request.start_date, request.end_date
+        )}
         exporter = CSVJSONExporter()
-
-        # Generate file based on format
-        if request.export_format.lower() == 'json':
+        if request.export_format.lower() == "json":
             file_bytes = exporter.export_to_json(cost_data)
             media_type = "application/json"
-        else:  # CSV
-            file_bytes = exporter.export_daily_costs_csv(cost_data.get('daily_costs', []))
+        else:
+            file_bytes = exporter.export_daily_costs_csv(cost_data["daily_costs"])
             media_type = "text/csv"
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'daily_costs',
-            request.profile_name,
-            request.export_format
+        file_name = exporter.generate_filename("daily_costs", request.profile_name, request.export_format)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Daily costs exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Daily costs exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -423,64 +397,22 @@ async def export_service_breakdown(
         CSV or JSON file download
     """
     try:
-        # Get service breakdown data
-        service_costs = DatabaseCostProcessor.get_service_breakdown(
-            db,
-            request.profile_name,
-            request.start_date,
-            request.end_date
-        )
-        service_data = {'service_costs': service_costs}
-
+        service_data = {"service_costs": DatabaseCostProcessor.get_service_breakdown(
+            db, request.profile_name, request.start_date, request.end_date
+        )}
         exporter = CSVJSONExporter()
-
-        # Generate file based on format
-        if request.export_format.lower() == 'json':
+        if request.export_format.lower() == "json":
             file_bytes = exporter.export_to_json(service_data)
             media_type = "application/json"
-        else:  # CSV
-            file_bytes = exporter.export_service_breakdown_csv(service_data.get('service_costs', []))
+        else:
+            file_bytes = exporter.export_service_breakdown_csv(service_data["service_costs"])
             media_type = "text/csv"
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'service_breakdown',
-            request.profile_name,
-            request.export_format
+        file_name = exporter.generate_filename("service_breakdown", request.profile_name, request.export_format)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Service breakdown exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Service breakdown exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -506,76 +438,31 @@ async def export_rightsizing_recommendations(
         File download (CSV, JSON, or Excel)
     """
     try:
-        # Get right-sizing recommendations using the service
         from app.services.rightsizing_service import RightSizingService
-
-        rs_service = RightSizingService(db)
-        recommendations_data = rs_service.get_recommendations(
+        _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        rs_data = RightSizingService(db).get_recommendations(
             profile_name=request.profile_name,
-            resource_types=request.resource_types.split(',') if request.resource_types else None
+            resource_types=request.resource_types.split(",") if request.resource_types else None,
         )
         recommendations = {
-            'recommendations': recommendations_data.recommendations,
-            'total_recommendations': recommendations_data.total_recommendations,
-            'total_monthly_savings': recommendations_data.total_monthly_savings
+            "recommendations": rs_data.recommendations,
+            "total_recommendations": rs_data.total_recommendations,
+            "total_monthly_savings": rs_data.total_monthly_savings,
         }
-
         exporter = CSVJSONExporter()
-
-        # Generate file based on format
-        if request.export_format.lower() == 'json':
-            file_bytes = exporter.export_to_json(recommendations)
-            media_type = "application/json"
-            file_ext = 'json'
-        elif request.export_format.lower() == 'excel':
-            # Use Excel exporter for right-sizing (we'll need to create this method)
-            file_bytes = b''  # Placeholder - would need Excel implementation
-            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            file_ext = 'xlsx'
-        else:  # CSV
-            file_bytes = exporter.export_rightsizing_csv(recommendations.get('recommendations', []))
-            media_type = "text/csv"
-            file_ext = 'csv'
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'rightsizing_recommendations',
-            request.profile_name,
-            file_ext
+        fmt = request.export_format.lower()
+        if fmt == "json":
+            file_bytes, media_type, file_ext = exporter.export_to_json(recommendations), "application/json", "json"
+        elif fmt == "excel":
+            file_bytes, media_type, file_ext = b"", _XLSX, "xlsx"  # placeholder
+        else:
+            file_bytes, media_type, file_ext = exporter.export_rightsizing_csv(recommendations["recommendations"]), "text/csv", "csv"
+        file_name = exporter.generate_filename("rightsizing_recommendations", request.profile_name, file_ext)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Right-sizing recommendations exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Right-sizing recommendations exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -601,67 +488,24 @@ async def export_unit_costs(
         CSV or JSON file download
     """
     try:
-        # Get unit cost data
-        unit_cost_service = UnitCostService(db)
-        unit_costs = unit_cost_service.calculate_unit_costs(
+        unit_costs = UnitCostService(db).calculate_unit_costs(
             profile_name=request.profile_name,
             start_date=request.start_date,
             end_date=request.end_date,
-            region=request.region
+            region=request.region,
         )
-
+        unit_costs_dict = unit_costs.model_dump() if hasattr(unit_costs, "model_dump") else unit_costs
         exporter = CSVJSONExporter()
-
-        # Convert Pydantic model to dict
-        unit_costs_dict = unit_costs.model_dump() if hasattr(unit_costs, 'model_dump') else unit_costs
-
-        # Generate file based on format
-        if request.export_format.lower() == 'json':
-            file_bytes = exporter.export_to_json(unit_costs_dict)
-            media_type = "application/json"
-        else:  # CSV
-            file_bytes = exporter.export_unit_costs_csv(unit_costs_dict)
-            media_type = "text/csv"
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'unit_costs',
-            request.profile_name,
-            request.export_format
+        if request.export_format.lower() == "json":
+            file_bytes, media_type = exporter.export_to_json(unit_costs_dict), "application/json"
+        else:
+            file_bytes, media_type = exporter.export_unit_costs_csv(unit_costs_dict), "text/csv"
+        file_name = exporter.generate_filename("unit_costs", request.profile_name, request.export_format)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Unit costs exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Unit costs exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -689,62 +533,18 @@ async def export_forecast_data(
         CSV or JSON file download
     """
     try:
-        # Get forecast data
-        forecast_data = DatabaseCostProcessor.get_forecast(
-            db,
-            request.profile_name,
-            days
-        )
-
+        forecast_data = DatabaseCostProcessor.get_forecast(db, request.profile_name, days)
         exporter = CSVJSONExporter()
-
-        # Generate file based on format
         if request.export_format.lower() == 'json':
-            file_bytes = exporter.export_to_json(forecast_data)
-            media_type = "application/json"
-        else:  # CSV
-            file_bytes = exporter.export_forecast_csv(forecast_data.get('predictions', []))
-            media_type = "text/csv"
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'forecast',
-            request.profile_name,
-            request.export_format
+            file_bytes, media_type = exporter.export_to_json(forecast_data), "application/json"
+        else:
+            file_bytes, media_type = exporter.export_forecast_csv(forecast_data.get('predictions', [])), "text/csv"
+        file_name = exporter.generate_filename('forecast', request.profile_name, request.export_format)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Forecast data exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Forecast data exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -768,64 +568,19 @@ async def export_anomalies(
         CSV or JSON file download
     """
     try:
-        # Get anomaly data (this would typically come from a previous anomaly detection run)
-        # For now, we'll assume the data is passed or retrieved from a job
-        # Placeholder - in real implementation, fetch from analytics service or job storage
         # TODO: Implement actual anomaly detection service integration
-        anomalies_data = {
-            'anomalies': [],
-            'message': 'Anomaly detection feature coming soon'
-        }
-
+        anomalies_data = {'anomalies': [], 'message': 'Anomaly detection feature coming soon'}
         exporter = CSVJSONExporter()
-
-        # Generate file based on format
         if request.export_format.lower() == 'json':
-            file_bytes = exporter.export_to_json(anomalies_data)
-            media_type = "application/json"
-        else:  # CSV
-            file_bytes = exporter.export_anomalies_csv(anomalies_data.get('anomalies', []))
-            media_type = "text/csv"
-
-        # Generate filename
-        file_name = exporter.generate_filename(
-            'anomalies',
-            request.profile_name,
-            request.export_format
+            file_bytes, media_type = exporter.export_to_json(anomalies_data), "application/json"
+        else:
+            file_bytes, media_type = exporter.export_anomalies_csv(anomalies_data.get('anomalies', [])), "text/csv"
+        file_name = exporter.generate_filename('anomalies', request.profile_name, request.export_format)
+        return _stream_or_upload(
+            file_bytes, media_type, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Anomaly data exported to S3 successfully",
         )
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=file_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type=media_type
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Anomaly data exported to S3 successfully",
-                file_name=file_name,
-                file_size=len(file_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(file_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
-        )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -851,61 +606,24 @@ async def export_costs_pdf(
         PDF file download or S3 upload confirmation
     """
     try:
-        # Get cost data
-        daily_costs = DatabaseCostProcessor.get_daily_costs(
-            db, request.profile_name, request.start_date, request.end_date
-        )
-        service_breakdown = DatabaseCostProcessor.get_service_breakdown(
-            db, request.profile_name, request.start_date, request.end_date
-        )
-
         cost_data = {
-            'daily_costs': daily_costs,
-            'service_breakdown': service_breakdown
+            'daily_costs': DatabaseCostProcessor.get_daily_costs(
+                db, request.profile_name, request.start_date, request.end_date
+            ),
+            'service_breakdown': DatabaseCostProcessor.get_service_breakdown(
+                db, request.profile_name, request.start_date, request.end_date
+            ),
         }
-
-        # Generate PDF
-        pdf_generator = PDFReportGenerator()
-        pdf_bytes = pdf_generator.generate_cost_report(cost_data, request.profile_name)
-
-        # Generate file name
+        pdf_bytes = PDFReportGenerator().generate_cost_report(cost_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"cost_report_{safe_profile_name}_{timestamp}.pdf"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=pdf_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/pdf'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Cost report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(pdf_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(pdf_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/pdf',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"cost_report_{safe_profile}_{timestamp}.pdf"
+        return _stream_or_upload(
+            pdf_bytes, 'application/pdf', file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Cost report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -929,61 +647,25 @@ async def export_costs_excel(
         Excel file download or S3 upload confirmation
     """
     try:
-        # Get cost data
-        daily_costs = DatabaseCostProcessor.get_daily_costs(
-            db, request.profile_name, request.start_date, request.end_date
-        )
-        service_breakdown = DatabaseCostProcessor.get_service_breakdown(
-            db, request.profile_name, request.start_date, request.end_date
-        )
-
         cost_data = {
-            'daily_costs': daily_costs,
-            'service_breakdown': service_breakdown
+            'daily_costs': DatabaseCostProcessor.get_daily_costs(
+                db, request.profile_name, request.start_date, request.end_date
+            ),
+            'service_breakdown': DatabaseCostProcessor.get_service_breakdown(
+                db, request.profile_name, request.start_date, request.end_date
+            ),
         }
-
-        # Generate Excel
-        excel_generator = ExcelReportGenerator()
-        excel_bytes = excel_generator.generate_cost_report(cost_data, request.profile_name)
-
-        # Generate file name
+        excel_bytes = ExcelReportGenerator().generate_cost_report(cost_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"cost_report_{safe_profile_name}_{timestamp}.xlsx"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=excel_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Cost report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(excel_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(excel_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"cost_report_{safe_profile}_{timestamp}.xlsx"
+        xlsx_mt = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        return _stream_or_upload(
+            excel_bytes, xlsx_mt, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Cost report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -1011,51 +693,17 @@ async def export_forecast_pdf(
         PDF file download or S3 upload confirmation
     """
     try:
-        # Get forecast data
         forecast_data = DatabaseCostProcessor.get_forecast(db, request.profile_name, days)
-
-        # Generate PDF
-        pdf_generator = PDFReportGenerator()
-        pdf_bytes = pdf_generator.generate_forecast_report(forecast_data, request.profile_name)
-
-        # Generate file name
+        pdf_bytes = PDFReportGenerator().generate_forecast_report(forecast_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"forecast_report_{safe_profile_name}_{timestamp}.pdf"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=pdf_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/pdf'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Forecast report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(pdf_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(pdf_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/pdf',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"forecast_report_{safe_profile}_{timestamp}.pdf"
+        return _stream_or_upload(
+            pdf_bytes, 'application/pdf', file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Forecast report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -1081,51 +729,18 @@ async def export_forecast_excel(
         Excel file download or S3 upload confirmation
     """
     try:
-        # Get forecast data
         forecast_data = DatabaseCostProcessor.get_forecast(db, request.profile_name, days)
-
-        # Generate Excel
-        excel_generator = ExcelReportGenerator()
-        excel_bytes = excel_generator.generate_forecast_report(forecast_data, request.profile_name)
-
-        # Generate file name
+        excel_bytes = ExcelReportGenerator().generate_forecast_report(forecast_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"forecast_report_{safe_profile_name}_{timestamp}.xlsx"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=excel_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Forecast report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(excel_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(excel_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"forecast_report_{safe_profile}_{timestamp}.xlsx"
+        xlsx_mt = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        return _stream_or_upload(
+            excel_bytes, xlsx_mt, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Forecast report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -1152,59 +767,18 @@ async def export_rightsizing_pdf(
     """
     try:
         from app.services.rightsizing_service import RightSizingService
-
-        # Get right-sizing data
-        rs_service = RightSizingService(db)
-        rightsizing_response = rs_service.get_recommendations(
-            request.profile_name,
-            request.resource_types
-        )
-
-        # Convert Pydantic model to dict
-        rightsizing_data = rightsizing_response.model_dump() if hasattr(rightsizing_response, 'model_dump') else rightsizing_response.dict()
-
-        # Generate PDF
-        pdf_generator = PDFReportGenerator()
-        pdf_bytes = pdf_generator.generate_rightsizing_report(rightsizing_data, request.profile_name)
-
-        # Generate file name
+        rs_response = RightSizingService(db).get_recommendations(request.profile_name, request.resource_types)
+        rightsizing_data = rs_response.model_dump() if hasattr(rs_response, 'model_dump') else rs_response.dict()
+        pdf_bytes = PDFReportGenerator().generate_rightsizing_report(rightsizing_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"rightsizing_report_{safe_profile_name}_{timestamp}.pdf"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=pdf_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/pdf'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Right-sizing report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(pdf_bytes),
-                s3_url=upload_result.get('s3_url'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(pdf_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/pdf',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"rightsizing_report_{safe_profile}_{timestamp}.pdf"
+        return _stream_or_upload(
+            pdf_bytes, 'application/pdf', file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Right-sizing report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -1229,59 +803,19 @@ async def export_rightsizing_excel(
     """
     try:
         from app.services.rightsizing_service import RightSizingService
-
-        # Get right-sizing data
-        rs_service = RightSizingService(db)
-        rightsizing_response = rs_service.get_recommendations(
-            request.profile_name,
-            request.resource_types
-        )
-
-        # Convert Pydantic model to dict
-        rightsizing_data = rightsizing_response.model_dump() if hasattr(rightsizing_response, 'model_dump') else rightsizing_response.dict()
-
-        # Generate Excel
-        excel_generator = ExcelReportGenerator()
-        excel_bytes = excel_generator.generate_rightsizing_report(rightsizing_data, request.profile_name)
-
-        # Generate file name
+        rs_response = RightSizingService(db).get_recommendations(request.profile_name, request.resource_types)
+        rightsizing_data = rs_response.model_dump() if hasattr(rs_response, 'model_dump') else rs_response.dict()
+        excel_bytes = ExcelReportGenerator().generate_rightsizing_report(rightsizing_data, request.profile_name)
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_profile_name = request.profile_name.replace(' ', '_').replace('/', '_')
-        file_name = f"rightsizing_report_{safe_profile_name}_{timestamp}.xlsx"
-
-        # Upload to S3 if requested
-        if request.upload_to_s3 and request.s3_bucket:
-            aws_session = db_session_manager.get_session(db, request.profile_name)
-            upload_result = S3UploaderService.upload_report(
-                file_content=excel_bytes,
-                bucket_name=request.s3_bucket,
-                file_name=file_name,
-                aws_session=aws_session,
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-
-            if not upload_result['success']:
-                raise HTTPException(status_code=500, detail=upload_result.get('error', 'S3 upload failed'))
-
-            return ExportResponse(
-                success=True,
-                message=f"Right-sizing report uploaded to S3 successfully",
-                file_name=file_name,
-                file_size=len(excel_bytes),
-                s3_url=upload_result.get('s3_bucket'),
-                s3_bucket=upload_result.get('s3_bucket'),
-                s3_key=upload_result.get('s3_key')
-            )
-
-        # Return file as download
-        file_stream = io.BytesIO(excel_bytes)
-        return StreamingResponse(
-            file_stream,
-            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={"Content-Disposition": f"attachment; filename={file_name}"}
+        safe_profile = request.profile_name.replace(' ', '_').replace('/', '_')
+        file_name = f"rightsizing_report_{safe_profile}_{timestamp}.xlsx"
+        xlsx_mt = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        return _stream_or_upload(
+            excel_bytes, xlsx_mt, file_name,
+            request.upload_to_s3, request.s3_bucket, request.profile_name, db,
+            s3_message="Right-sizing report uploaded to S3 successfully",
         )
-
     except HTTPException:
         raise
     except Exception as e:

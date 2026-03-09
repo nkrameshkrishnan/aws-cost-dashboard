@@ -8,17 +8,24 @@ from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError
 
+from app.auditors.base import AuditorBase
+
 logger = logging.getLogger(__name__)
 
 
-class RedshiftAuditor:
+class RedshiftAuditor(AuditorBase):
     """Auditor for Redshift clusters."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.redshift = session.client('redshift', region_name=region)
         self.cloudwatch = session.client('cloudwatch', region_name=region)
+
+    def run(self, **kwargs) -> dict:
+        """Run all Redshift audit checks."""
+        return {
+            'idle_clusters': self.audit_idle_clusters(),
+        }
 
     def audit_idle_clusters(self, connection_threshold: int = 1, days: int = 7) -> List[Dict[str, Any]]:
         """

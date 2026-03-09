@@ -69,16 +69,11 @@ from app.services.audit.ebs_snapshot_auditor import EBSSnapshotAuditor
 from app.services.audit.data_transfer_auditor import DataTransferAuditor
 from app.services.audit.beanstalk_auditor import ElasticBeanstalkAuditor
 # Phase 7 auditors
-from app.aws.auditors.cloudfront_auditor import CloudFrontAuditor
-from app.aws.auditors.route53_auditor import Route53Auditor
-from app.aws.auditors.sqs_auditor import SQSAuditor
-from app.aws.auditors.sns_auditor import SNSAuditor
-from app.aws.auditors.apigateway_auditor import APIGatewayAuditor
-from app.aws.auditors.stepfunctions_auditor import StepFunctionsAuditor
-from app.aws.auditors.ecs_auditor import ECSAuditor
-from app.aws.auditors.redshift_auditor import RedshiftAuditor
-from app.aws.auditors.kinesis_auditor import KinesisAuditor
-from app.aws.auditors.glue_auditor import GlueAuditor
+from app.aws.auditors import (
+    CloudFrontAuditor,
+    Route53Auditor,
+    PHASE7_REGISTRY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -360,63 +355,15 @@ class AuditService:
                     lookback_days=14  # Could add to AuditRequest parameters
                 )
 
-            # Phase 7 audits
-            if 'sqs' in audit_request.audit_types:
-                sqs_auditor = SQSAuditor(region_session, region)
-                unused_queues = sqs_auditor.audit_unused_queues(days=30)
-                high_retention = sqs_auditor.audit_high_retention_queues()
-                region_results['sqs_audit'] = {
-                    'unused_queues': unused_queues,
-                    'high_retention_queues': high_retention
-                }
-
-            if 'sns' in audit_request.audit_types:
-                sns_auditor = SNSAuditor(region_session, region)
-                region_results['sns_audit'] = {
-                    'unused_topics': sns_auditor.audit_unused_topics(days=30)
-                }
-
-            if 'apigateway' in audit_request.audit_types:
-                apigw_auditor = APIGatewayAuditor(region_session, region)
-                unused_apis = apigw_auditor.audit_unused_apis(days=30)
-                no_caching = apigw_auditor.audit_apis_without_caching()
-                region_results['apigateway_audit'] = {
-                    'unused_apis': unused_apis,
-                    'apis_without_caching': no_caching
-                }
-
-            if 'stepfunctions' in audit_request.audit_types:
-                sfn_auditor = StepFunctionsAuditor(region_session, region)
-                region_results['stepfunctions_audit'] = {
-                    'unused_state_machines': sfn_auditor.audit_unused_state_machines(days=30)
-                }
-
-            if 'ecs' in audit_request.audit_types:
-                ecs_auditor = ECSAuditor(region_session, region)
-                region_results['ecs_audit'] = {
-                    'oversized_tasks': ecs_auditor.audit_oversized_tasks()
-                }
-
-            if 'redshift' in audit_request.audit_types:
-                redshift_auditor = RedshiftAuditor(region_session, region)
-                region_results['redshift_audit'] = {
-                    'idle_clusters': redshift_auditor.audit_idle_clusters()
-                }
-
-            if 'kinesis' in audit_request.audit_types:
-                kinesis_auditor = KinesisAuditor(region_session, region)
-                region_results['kinesis_audit'] = {
-                    'unused_streams': kinesis_auditor.audit_unused_streams(days=7)
-                }
-
-            if 'glue' in audit_request.audit_types:
-                glue_auditor = GlueAuditor(region_session, region)
-                unused_crawlers = glue_auditor.audit_unused_crawlers(days=30)
-                unused_jobs = glue_auditor.audit_unused_jobs(days=30)
-                region_results['glue_audit'] = {
-                    'unused_crawlers': unused_crawlers,
-                    'unused_jobs': unused_jobs
-                }
+            # Phase 7 audits — driven by registry; no per-auditor branching required
+            for audit_type, AuditorClass in PHASE7_REGISTRY.items():
+                if audit_type in audit_request.audit_types:
+                    try:
+                        auditor = AuditorClass(region_session, region)
+                        region_results[f'{audit_type}_audit'] = auditor.run()
+                    except Exception as e:
+                        logger.warning(f"Error running {audit_type} auditor in {region}: {e}")
+                        region_results[f'{audit_type}_audit'] = None
 
             logger.info(f"Completed scanning region: {region}")
             return region_results
@@ -864,14 +811,22 @@ class AuditService:
 
                             # Create partial results with current aggregated data
                             # This allows frontend to display incremental results
-                            partial_summary = AuditService._generate_summary(
-                                ec2_audit, ebs_audit, eip_audit, tagging_audit,
-                                rds_audit, lambda_audit, s3_audit, lb_audit,
-                                nat_gateway_audit, elasticache_audit,
-                                cloudwatch_logs_audit, dynamodb_audit, savings_plans_audit,
-                                vpc_endpoint_audit, efs_audit, ebs_snapshot_audit,
-                                data_transfer_audit, beanstalk_audit
-                            )
+                            partial_summary = AuditService._generate_summary({
+                                'ec2': ec2_audit, 'ebs': ebs_audit,
+                                'eip': eip_audit, 'tagging': tagging_audit,
+                                'rds': rds_audit, 'lambda': lambda_audit,
+                                's3': s3_audit, 'lb': lb_audit,
+                                'nat_gateway': nat_gateway_audit,
+                                'elasticache': elasticache_audit,
+                                'cloudwatch_logs': cloudwatch_logs_audit,
+                                'dynamodb': dynamodb_audit,
+                                'savings_plans': savings_plans_audit,
+                                'vpc_endpoint': vpc_endpoint_audit,
+                                'efs': efs_audit,
+                                'ebs_snapshot': ebs_snapshot_audit,
+                                'data_transfer': data_transfer_audit,
+                                'beanstalk': beanstalk_audit,
+                            })
 
                             partial_results = FullAuditResults(
                                 account_name=audit_request.account_name,
@@ -925,26 +880,22 @@ class AuditService:
                 tagging_audit.compliance_percentage = 0.0
 
             # Generate summary
-            summary = AuditService._generate_summary(
-                ec2_audit,
-                ebs_audit,
-                eip_audit,
-                tagging_audit,
-                rds_audit,
-                lambda_audit,
-                s3_audit,
-                lb_audit,
-                nat_gateway_audit,
-                elasticache_audit,
-                cloudwatch_logs_audit,
-                dynamodb_audit,
-                savings_plans_audit,
-                vpc_endpoint_audit,
-                efs_audit,
-                ebs_snapshot_audit,
-                data_transfer_audit,
-                beanstalk_audit
-            )
+            summary = AuditService._generate_summary({
+                'ec2': ec2_audit, 'ebs': ebs_audit,
+                'eip': eip_audit, 'tagging': tagging_audit,
+                'rds': rds_audit, 'lambda': lambda_audit,
+                's3': s3_audit, 'lb': lb_audit,
+                'nat_gateway': nat_gateway_audit,
+                'elasticache': elasticache_audit,
+                'cloudwatch_logs': cloudwatch_logs_audit,
+                'dynamodb': dynamodb_audit,
+                'savings_plans': savings_plans_audit,
+                'vpc_endpoint': vpc_endpoint_audit,
+                'efs': efs_audit,
+                'ebs_snapshot': ebs_snapshot_audit,
+                'data_transfer': data_transfer_audit,
+                'beanstalk': beanstalk_audit,
+            })
 
             # Update progress for final aggregation
             if job_id:
@@ -1029,27 +980,33 @@ class AuditService:
             raise
 
     @staticmethod
-    def _generate_summary(
-        ec2_audit: EC2AuditResults,
-        ebs_audit: EBSAuditResults,
-        eip_audit: ElasticIPAuditResults,
-        tagging_audit: TaggingAuditResults,
-        rds_audit: RDSAuditResults,
-        lambda_audit: LambdaAuditResults,
-        s3_audit: S3AuditResults,
-        lb_audit: LoadBalancerAuditResults,
-        nat_gateway_audit: NATGatewayAuditResults,
-        elasticache_audit: ElastiCacheAuditResults,
-        cloudwatch_logs_audit: CloudWatchLogsAuditResults,
-        dynamodb_audit: DynamoDBAuditResults,
-        savings_plans_audit: SavingsPlansCoverageResults,
-        vpc_endpoint_audit: VPCEndpointAuditResults,
-        efs_audit: EFSAuditResults,
-        ebs_snapshot_audit: EBSSnapshotAuditResults,
-        data_transfer_audit: DataTransferAuditResults,
-        beanstalk_audit: ElasticBeanstalkAuditResults
-    ) -> AuditSummary:
-        """Generate audit summary from individual audit results."""
+    def _generate_summary(audit_results: Dict) -> AuditSummary:
+        """
+        Generate audit summary from a dict of audit result objects.
+
+        The dict is keyed by short service name (e.g. ``'ec2'``) and maps to
+        the corresponding ``*AuditResults`` Pydantic model instance.  Missing
+        keys are handled gracefully via ``audit_results.get(key, default)``.
+        """
+        # Unpack with safe defaults so partial results (mid-scan) work fine
+        ec2_audit = audit_results.get('ec2', EC2AuditResults())
+        ebs_audit = audit_results.get('ebs', EBSAuditResults())
+        eip_audit = audit_results.get('eip', ElasticIPAuditResults())
+        tagging_audit = audit_results.get('tagging', TaggingAuditResults())
+        rds_audit = audit_results.get('rds', RDSAuditResults())
+        lambda_audit = audit_results.get('lambda', LambdaAuditResults())
+        s3_audit = audit_results.get('s3', S3AuditResults())
+        lb_audit = audit_results.get('lb', LoadBalancerAuditResults())
+        nat_gateway_audit = audit_results.get('nat_gateway', NATGatewayAuditResults())
+        elasticache_audit = audit_results.get('elasticache', ElastiCacheAuditResults())
+        cloudwatch_logs_audit = audit_results.get('cloudwatch_logs', CloudWatchLogsAuditResults())
+        dynamodb_audit = audit_results.get('dynamodb', DynamoDBAuditResults())
+        savings_plans_audit = audit_results.get('savings_plans', SavingsPlansCoverageResults())
+        vpc_endpoint_audit = audit_results.get('vpc_endpoint', VPCEndpointAuditResults())
+        efs_audit = audit_results.get('efs', EFSAuditResults())
+        ebs_snapshot_audit = audit_results.get('ebs_snapshot', EBSSnapshotAuditResults())
+        data_transfer_audit = audit_results.get('data_transfer', DataTransferAuditResults())
+        beanstalk_audit = audit_results.get('beanstalk', ElasticBeanstalkAuditResults())
 
         # Count findings by category
         findings_by_category = {

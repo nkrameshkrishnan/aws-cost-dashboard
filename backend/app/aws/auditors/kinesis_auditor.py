@@ -8,17 +8,24 @@ from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError
 
+from app.auditors.base import AuditorBase
+
 logger = logging.getLogger(__name__)
 
 
-class KinesisAuditor:
+class KinesisAuditor(AuditorBase):
     """Auditor for Kinesis Data Streams."""
 
     def __init__(self, session: boto3.Session, region: str):
-        self.session = session
-        self.region = region
+        super().__init__(session, region)
         self.kinesis = session.client('kinesis', region_name=region)
         self.cloudwatch = session.client('cloudwatch', region_name=region)
+
+    def run(self, days: int = 7, **kwargs) -> dict:
+        """Run all Kinesis audit checks."""
+        return {
+            'unused_streams': self.audit_unused_streams(days=days),
+        }
 
     def audit_unused_streams(self, days: int = 7) -> List[Dict[str, Any]]:
         """
