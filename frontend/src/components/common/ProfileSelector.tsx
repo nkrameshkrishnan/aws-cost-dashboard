@@ -15,7 +15,7 @@ export function ProfileSelector() {
 
   // Update available profiles when accounts are loaded
   useEffect(() => {
-    if (!accounts || accounts.length === 0) return
+    if (!accounts || !Array.isArray(accounts) || accounts.length === 0) return
 
     const profileNames = accounts.map(acc => acc.name)
 
@@ -45,7 +45,7 @@ export function ProfileSelector() {
     )
   }
 
-  if (!accounts || accounts.length === 0) {
+  if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
     return (
       <div className="text-sm text-amber-600">
         No AWS accounts configured. <a href="/aws-accounts" className="underline">Add one</a>

@@ -225,7 +225,7 @@ export function DrillDownModal({
                 <p className="text-modernRed-700 text-sm">{error}</p>
               </div>
             </div>
-          ) : data && data.breakdown.length > 0 ? (
+          ) : data && Array.isArray(data.breakdown) && data.breakdown.length > 0 ? (
             <>
               {/* Summary */}
               <div className="bg-gradient-to-br from-brandRed-50 to-modernTeal-50 rounded-lg p-4 mb-6 border border-brandRed-100">
