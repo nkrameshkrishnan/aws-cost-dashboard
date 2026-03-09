@@ -1,0 +1,102 @@
+name: Deploy Frontend
+
+# Deploy the React SPA to GitHub Pages on pushes to main that touch frontend
+# code, or on manual dispatch (e.g. after updating VITE_API_BASE_URL).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+# Only one frontend deploy at a time — no cancel so deploys finish cleanly.
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+# Required permissions for the GITHUB_TOKEN to push to gh-pages.
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Required secrets / variables (GitHub → Settings → Secrets and variables → Actions):
+#   VITE_API_BASE_URL  — your API Gateway invoke URL
+#                        e.g. https://abc123.execute-api.us-east-1.amazonaws.com/prod
+#
+# Optional variables (Actions → Variables):
+#   VITE_APP_NAME      — defaults to "AWS Cost Dashboard"
+#   VITE_APP_VERSION   — defaults to the short SHA
+
+jobs:
+  # ===========================================================================
+  # Build the React bundle and deploy to GitHub Pages
+  # ===========================================================================
+  deploy:
+    name: Build & deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: https://nkrameshkrishnan.github.io/aws-cost-dashboard/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      # Build — bake env vars into the static bundle at compile time.
+      # VITE_* vars are inlined by Vite at build time (not runtime).
+      # -----------------------------------------------------------------------
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_VERSION: v1
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME || 'AWS Cost Dashboard' }}
+          VITE_APP_VERSION: ${{ vars.VITE_APP_VERSION || github.sha }}
+          # GitHub Pages serves the app from a sub-path — set the base URL
+          # to match the repo name so asset paths resolve correctly.
+          # Must match `base` in vite.config.ts (default: '/aws-cost-dashboard/')
+          NODE_ENV: production
+        run: npm run build
+
+      # GitHub Pages requires .nojekyll to serve files prefixed with _
+      - name: Add .nojekyll
+        run: touch frontend/dist/.nojekyll
+
+      # -----------------------------------------------------------------------
+      # Deploy — push dist/ to the gh-pages branch.
+      # The peaceiris/actions-gh-pages action handles branch creation,
+      # commit, and force-push cleanly.
+      # -----------------------------------------------------------------------
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: frontend/dist
+          publish_branch: gh-pages
+          commit_message: "Deploy frontend ${{ github.sha }} [skip ci]"
+          # Keep custom domain file if you have one (CNAME)
+          keep_files: false
+
+      - name: Deployment summary
+        run: |
+          echo "### Frontend deployed :tada:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| URL   | https://nkrameshkrishnan.github.io/aws-cost-dashboard/ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| API   | \`${{ secrets.VITE_API_BASE_URL }}\` |" >> $GITHUB_STEP_SUMMARY
