@@ -38,7 +38,7 @@ export function CostTrendChart({ profileName, startDate, endDate }: CostTrendCha
     )
   }
 
-  if (!data || data.daily_costs.length === 0) {
+  if (!data || !Array.isArray(data.daily_costs) || data.daily_costs.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center">
         <div className="text-gray-500">No cost data available for this period</div>

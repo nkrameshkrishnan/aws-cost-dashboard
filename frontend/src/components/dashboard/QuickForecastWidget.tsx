@@ -19,7 +19,7 @@ export function QuickForecastWidget({ forecast, isLoading }: QuickForecastWidget
     )
   }
 
-  if (!forecast) {
+  if (!forecast || !Array.isArray(forecast.predictions) || forecast.predictions.length === 0) {
     return null
   }
 

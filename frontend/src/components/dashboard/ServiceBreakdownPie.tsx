@@ -99,7 +99,7 @@ export function ServiceBreakdownPie({
     )
   }
 
-  if (!data || data.services.length === 0) {
+  if (!data || !Array.isArray(data.services) || data.services.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center">
         <div className="text-gray-500">No service cost data available</div>
