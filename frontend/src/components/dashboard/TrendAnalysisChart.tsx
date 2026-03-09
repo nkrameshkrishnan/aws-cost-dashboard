@@ -50,13 +50,24 @@ export function TrendAnalysisChart({ profileName }: TrendAnalysisChartProps) {
     )
   }
 
-  // Format data for chart
-  const chartData = trendData.trend_data.map((record) => ({
-    month: format(parseISO(record.month), 'MMM yyyy'),
-    cost: record.cost,
-    momChange: record.mom_change_percent,
-    fullMonth: record.month,
-  }))
+  // Format data for chart (filter out any null/undefined records from the array)
+  const chartData = trendData.trend_data
+    .filter((record) => record != null && record.cost != null)
+    .map((record) => ({
+      month: format(parseISO(record.month), 'MMM yyyy'),
+      cost: record.cost,
+      momChange: record.mom_change_percent,
+      fullMonth: record.month,
+    }))
+
+  if (chartData.length === 0) {
+    return (
+      <div className="h-96 flex flex-col items-center justify-center text-gray-500">
+        <TrendingUp className="w-12 h-12 mb-2 opacity-50" />
+        <p>No trend data available</p>
+      </div>
+    )
+  }
 
   // Calculate simple linear regression for trend line
   const n = chartData.length

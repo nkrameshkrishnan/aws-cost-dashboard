@@ -46,12 +46,14 @@ export function CostTrendChart({ profileName, startDate, endDate }: CostTrendCha
     )
   }
 
-  // Format data for chart
-  const chartData = data.daily_costs.map((record) => ({
-    date: format(parseISO(record.date), 'MMM dd'),
-    cost: record.cost,
-    fullDate: record.date,
-  }))
+  // Format data for chart (filter out any null/undefined records)
+  const chartData = data.daily_costs
+    .filter((record) => record != null && record.cost != null)
+    .map((record) => ({
+      date: format(parseISO(record.date), 'MMM dd'),
+      cost: record.cost,
+      fullDate: record.date,
+    }))
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {

@@ -19,7 +19,7 @@ interface MoMComparisonChartProps {
 
 export function MoMComparisonChart({ profileName, momData }: MoMComparisonChartProps) {
 
-  if (!momData) {
+  if (!momData || !momData.current_month || !momData.previous_month) {
     return (
       <div className="h-80 flex flex-col items-center justify-center text-gray-500">
         <TrendingUp className="w-12 h-12 mb-2 opacity-50" />
