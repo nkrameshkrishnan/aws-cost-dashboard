@@ -41,7 +41,7 @@ export function TrendAnalysisChart({ profileName }: TrendAnalysisChartProps) {
     )
   }
 
-  if (!trendData || !trendData.trend_data || trendData.trend_data.length === 0) {
+  if (!trendData || !Array.isArray(trendData.trend_data) || trendData.trend_data.length === 0) {
     return (
       <div className="h-96 flex flex-col items-center justify-center text-gray-500">
         <TrendingUp className="w-12 h-12 mb-2 opacity-50" />

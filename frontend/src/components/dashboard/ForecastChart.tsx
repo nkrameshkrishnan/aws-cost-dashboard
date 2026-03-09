@@ -54,7 +54,7 @@ export function ForecastChart({ profileName }: ForecastChartProps) {
     )
   }
 
-  if (!historicalData || !historicalData.daily_costs || historicalData.daily_costs.length === 0) {
+  if (!historicalData || !Array.isArray(historicalData.daily_costs) || historicalData.daily_costs.length === 0) {
     return (
       <div className="h-96 flex flex-col items-center justify-center text-gray-500">
         <Calendar className="w-12 h-12 mb-2 opacity-50" />
@@ -79,7 +79,7 @@ export function ForecastChart({ profileName }: ForecastChartProps) {
   })
 
   // Add forecast data if available
-  if (forecastData && forecastData.daily_forecast) {
+  if (forecastData && Array.isArray(forecastData.daily_forecast) && forecastData.daily_forecast.length > 0) {
     // Get the last historical cost for the bridge
     const lastHistoricalCost = historicalData.daily_costs[historicalData.daily_costs.length - 1]?.cost || 0
 
