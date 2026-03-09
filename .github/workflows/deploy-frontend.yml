@@ -15,11 +15,12 @@ concurrency:
   group: deploy-frontend
   cancel-in-progress: false
 
-# Required permissions for the GITHUB_TOKEN to push to gh-pages.
+# contents:write is the only permission peaceiris/actions-gh-pages needs —
+# it pushes directly to the gh-pages branch using GITHUB_TOKEN.
+# pages:write / id-token:write are only needed for the official
+# actions/deploy-pages flow and are what triggers environment protection rules.
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 # Required secrets / variables (GitHub → Settings → Secrets and variables → Actions):
 #   VITE_API_BASE_URL  — your API Gateway invoke URL
@@ -36,10 +37,6 @@ jobs:
   deploy:
     name: Build & deploy to GitHub Pages
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: https://nkrameshkrishnan.github.io/aws-cost-dashboard/
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
