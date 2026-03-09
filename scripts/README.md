@@ -1,412 +1,283 @@
-# AWS Cost Dashboard - Utility Scripts
+# AWS Cost Dashboard — Scripts
 
-This directory contains utility scripts for deploying, managing, and maintaining the AWS Cost Dashboard application.
+Utility scripts for building, deploying, and operating the AWS Cost Dashboard.
 
-## Available Scripts
+## Architecture context
 
-### 1. deploy.sh - Deployment Automation
-
-Automates the complete deployment process including building Docker images and applying Terraform infrastructure.
-
-**Usage:**
-```bash
-./scripts/deploy.sh [environment] [action]
+```
+Frontend  →  GitHub Pages   (static React bundle — deploy with deploy-pages.sh)
+Backend   →  ECS Fargate    (FastAPI — deploy with deploy.sh via Terraform)
+Entry     →  API Gateway    (public HTTPS endpoint, set as VITE_API_BASE_URL)
 ```
 
-**Arguments:**
-- `environment`: dev, staging, or production (default: dev)
-- `action`: plan, apply, or destroy (default: plan)
+---
 
-**Examples:**
+## Scripts overview
+
+| Script | Purpose |
+|--------|---------|
+| `build-prod.sh` | Build backend + frontend Docker images |
+| `deploy.sh` | Deploy backend infrastructure (Terraform + ECS) |
+| `deploy-pages.sh` | Build frontend and push to GitHub Pages |
+| `db-migrate.sh` | Run Alembic database migrations |
+| `backup-db.sh` | Backup / restore RDS PostgreSQL |
+| `manage-secrets.sh` | Generate and manage AWS Secrets Manager keys |
+| `health-check.sh` | Check health of all components |
+| `setup-testing.sh` | Set up the local test environment |
+
+---
+
+## build-prod.sh — Build Docker images
+
+Reads all config from `.env.production`.
+
 ```bash
-# Plan deployment to development
-./scripts/deploy.sh dev plan
+# Build only (backend + frontend images)
+./scripts/build-prod.sh
 
-# Deploy to production
+# Build and push to registry
+./scripts/build-prod.sh --push
+```
+
+After `--push`, update `terraform.tfvars`:
+```hcl
+backend_image = "your-registry/aws-cost-dashboard-backend:VERSION"
+```
+
+> The frontend Docker image is built for reference. The primary production
+> deployment of the frontend is via GitHub Pages (`deploy-pages.sh`).
+
+---
+
+## deploy.sh — Backend infrastructure deployment
+
+Deploys Terraform infrastructure (VPC, RDS, Redis, ECS, API Gateway).
+Optionally builds and pushes the backend Docker image first.
+
+```bash
+# Usage
+./scripts/deploy.sh [environment] [action]
+
+# Plan changes
+./scripts/deploy.sh production plan
+
+# Apply (builds + pushes backend image, then runs Terraform)
 ./scripts/deploy.sh production apply
 
-# Destroy staging infrastructure
+# Destroy (with confirmation)
 ./scripts/deploy.sh staging destroy
 ```
 
-**What it does:**
-1. Checks prerequisites (Terraform, AWS CLI, Docker, jq)
-2. Validates AWS credentials
-3. Builds production Docker images
-4. Pushes images to configured registry
-5. Runs Terraform to provision infrastructure
-6. Displays deployment information
+Valid environments: `dev`, `staging`, `production`
 
----
+**Requirements:** `terraform`, `aws`, `docker`, `jq`, `.env.production`
 
-### 2. db-migrate.sh - Database Migrations
+After `apply`, the script prints the `api_gateway_url`. Set that as
+`VITE_API_BASE_URL` in `.env.production`, then deploy the frontend:
 
-Manages database schema migrations using Alembic.
-
-**Usage:**
 ```bash
-./scripts/db-migrate.sh [command] [options]
-```
-
-**Commands:**
-- `upgrade`: Upgrade to latest migration (default)
-- `downgrade`: Downgrade one migration
-- `history`: Show migration history
-- `current`: Show current migration version
-- `create "message"`: Create a new migration
-- `init`: Initialize Alembic (first time only)
-
-**Examples:**
-```bash
-# Upgrade database to latest version
-./scripts/db-migrate.sh upgrade
-
-# Create new migration
-./scripts/db-migrate.sh create "add user preferences table"
-
-# Show migration history
-./scripts/db-migrate.sh history
-
-# Downgrade one version
-./scripts/db-migrate.sh downgrade
+./scripts/deploy-pages.sh
 ```
 
 ---
 
-### 3. manage-secrets.sh - Secrets Management
+## deploy-pages.sh — GitHub Pages deployment
 
-Helps generate and manage application secrets in AWS Secrets Manager.
+Builds the React app (baking `VITE_*` vars from `.env.production` into the
+bundle) and pushes `dist/` to the `gh-pages` branch.
 
-**Usage:**
 ```bash
-./scripts/manage-secrets.sh [command] [environment]
+# Build and deploy
+./scripts/deploy-pages.sh
+
+# Dry run (build only, no git push)
+./scripts/deploy-pages.sh --dry-run
 ```
 
-**Commands:**
-- `generate`: Generate new application keys locally
-- `create`: Create secrets in AWS Secrets Manager
-- `update`: Update secrets in AWS Secrets Manager
-- `get`: Retrieve secrets from AWS Secrets Manager
-- `rotate`: Rotate application keys (invalidates user sessions)
+**First-time setup:**
+1. Run `./scripts/deploy-pages.sh` — this creates the `gh-pages` branch.
+2. In GitHub: **Settings → Pages → Branch: `gh-pages` / `(root)`**.
+3. Note your Pages URL (e.g. `https://your-username.github.io/aws-cost-dashboard`).
+4. Add it to `cors_allowed_origins` in `terraform.tfvars`, then re-run `deploy.sh`.
 
-**Examples:**
+**Requirements:** `node`, `npm`, `git`, `VITE_API_BASE_URL` in `.env.production`
+
+---
+
+## db-migrate.sh — Database migrations
+
+Runs Alembic migrations against the configured database.
+
 ```bash
-# Generate keys locally (for .env file)
+./scripts/db-migrate.sh upgrade          # Apply all pending migrations
+./scripts/db-migrate.sh downgrade        # Roll back one migration
+./scripts/db-migrate.sh history          # Show migration history
+./scripts/db-migrate.sh current          # Show current revision
+./scripts/db-migrate.sh create "msg"     # Generate a new migration
+```
+
+Set `DATABASE_URL` before running locally:
+
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/aws_cost_dashboard \
+  ./scripts/db-migrate.sh upgrade
+```
+
+In production, ECS tasks run migrations on startup via the entrypoint.
+
+---
+
+## backup-db.sh — Database backup and restore
+
+```bash
+./scripts/backup-db.sh production create    # Create compressed backup
+./scripts/backup-db.sh production list      # List available backups
+./scripts/backup-db.sh staging    restore   # Interactive restore
+./scripts/backup-db.sh production cleanup   # Delete backups older than 30 days
+```
+
+Backups are written to `backups/` at the project root and optionally uploaded
+to S3 if `BACKUP_S3_BUCKET` is set.
+
+**Requirements:** `pg_dump`, `psql`, `gzip`, `aws` (for S3 uploads)
+
+---
+
+## manage-secrets.sh — Secrets management
+
+```bash
+# Generate keys locally (paste into .env.production / terraform.tfvars)
 ./scripts/manage-secrets.sh generate
 
-# Create secrets in AWS for production
+# Create secrets in AWS Secrets Manager for production
 ./scripts/manage-secrets.sh create production
 
 # View current secrets
-./scripts/manage-secrets.sh get staging
+./scripts/manage-secrets.sh get production
 
-# Rotate production keys
+# Rotate keys (invalidates all user sessions)
 ./scripts/manage-secrets.sh rotate production
 ```
 
-**Generated Keys:**
-- `SECRET_KEY`: Session encryption key
-- `JWT_SECRET_KEY`: JWT token signing key
-- `ENCRYPTION_KEY`: Fernet key for AWS credential encryption
+Secrets stored: `SECRET_KEY`, `JWT_SECRET_KEY`, `ENCRYPTION_KEY`.
+
+**Requirements:** `aws`, `jq`, `python3`, `cryptography` package
 
 ---
 
-### 4. health-check.sh - System Health Monitoring
+## health-check.sh — Component health check
 
-Performs comprehensive health checks on all application components.
-
-**Usage:**
 ```bash
-./scripts/health-check.sh [environment] [url]
-```
-
-**Examples:**
-```bash
-# Check local development environment
+# Local dev stack
 ./scripts/health-check.sh local http://localhost:8000
 
-# Check production
-./scripts/health-check.sh production https://cost-dashboard.example.com
+# Production (use the API Gateway URL from `terraform output api_gateway_url`)
+./scripts/health-check.sh production https://abc123.execute-api.us-east-1.amazonaws.com/prod
 ```
 
-**What it checks:**
-- Backend API availability
-- Database connectivity
-- Redis cache connectivity
-- AWS API connectivity
-- ECS service status (for AWS deployments)
-- System performance metrics
-
-**Output:**
-```
-✓ Backend API is healthy (HTTP 200)
-✓ Database connection is healthy
-✓ Redis connection is healthy
-✓ AWS connectivity is healthy
-========================================
-System Metrics
-========================================
-{
-  "cache": {
-    "hit_rate": 78.5,
-    "total_hits": 1247
-  },
-  "api": {
-    "avg_response_time_ms": 145.6
-  }
-}
-```
+Checks: backend `/health`, database, Redis, AWS connectivity, ECS service status.
 
 ---
 
-### 5. backup-db.sh - Database Backup & Restore
+## setup-testing.sh — Test environment setup
 
-Creates and manages PostgreSQL database backups.
-
-**Usage:**
 ```bash
-./scripts/backup-db.sh [environment] [action]
+./scripts/setup-testing.sh all       # Backend + frontend test deps
+./scripts/setup-testing.sh backend   # Python venv + pytest deps only
+./scripts/setup-testing.sh frontend  # npm test deps only
 ```
 
-**Actions:**
-- `create`: Create a new backup (default)
-- `restore`: Restore from a backup
-- `list`: List available backups
-- `cleanup`: Remove old backups
+Creates `tests/.venv` for the backend test suite.
 
-**Examples:**
+---
+
+## Common workflows
+
+### First deploy
+
 ```bash
-# Create production backup
+# 1. Fill in all config
+cp .env.example .env.production
+# Edit .env.production — set DOCKER_REGISTRY, VERSION, db passwords, secrets, etc.
+cd infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars — set cors_allowed_origins, backend_image, secrets, etc.
+
+# 2. Generate application secrets (paste values into .env.production + terraform.tfvars)
+./scripts/manage-secrets.sh generate
+
+# 3. Build and push backend image
+./scripts/build-prod.sh --push
+
+# 4. Deploy backend infrastructure (~15-20 min)
+./scripts/deploy.sh production apply
+# Note the api_gateway_url printed at the end
+
+# 5. Set the API Gateway URL in .env.production
+# VITE_API_BASE_URL=https://abc123.execute-api.us-east-1.amazonaws.com/prod
+
+# 6. Run database migrations
+./scripts/db-migrate.sh upgrade
+
+# 7. Deploy frontend to GitHub Pages
+./scripts/deploy-pages.sh
+```
+
+### Deploying a new backend version
+
+```bash
+# 1. Bump VERSION in .env.production
+# 2. Build and push the new image
+./scripts/build-prod.sh --push
+# 3. Update backend_image in terraform.tfvars to the new tag
+# 4. Deploy
+./scripts/deploy.sh production apply
+# Or force ECS to pick up the new image without Terraform:
+# aws ecs update-service --cluster CLUSTER --service BACKEND_SVC --force-new-deployment
+```
+
+### Deploying a frontend change
+
+```bash
+# Ensure VITE_API_BASE_URL is set in .env.production
+./scripts/deploy-pages.sh
+```
+
+### Daily operations
+
+```bash
+# Health check
+./scripts/health-check.sh production https://YOUR-API-GATEWAY-URL
+
+# Create database backup
 ./scripts/backup-db.sh production create
 
-# List all backups
-./scripts/backup-db.sh production list
-
-# Restore from backup
-./scripts/backup-db.sh staging restore
-
-# Remove backups older than 30 days
-./scripts/backup-db.sh production cleanup
+# Tail backend logs
+aws logs tail /ecs/awscost-production-backend --follow
 ```
-
-**Features:**
-- Compressed backups (gzip)
-- S3 upload support (if configured)
-- Automatic retention management
-- Safe restore with confirmation
-
-**Environment Variables:**
-- `BACKUP_S3_BUCKET`: S3 bucket for backup uploads (optional)
 
 ---
 
 ## Prerequisites
 
-### Required Tools
+| Tool | Required by | Install |
+|------|------------|---------|
+| `bash` 4+ | All | — |
+| `aws` CLI v2 | deploy, backup, manage-secrets, health-check | `brew install awscli` |
+| `terraform` ≥ 1.0 | deploy | `brew install terraform` |
+| `docker` | build-prod, deploy | docker.com |
+| `node` / `npm` | deploy-pages, setup-testing | nodejs.org |
+| `git` | deploy-pages | — |
+| `jq` | several | `brew install jq` |
+| `pg_dump` / `psql` | backup-db, db-migrate | `brew install postgresql-client` |
+| `python3` | db-migrate, manage-secrets | python.org |
 
-All scripts require:
-- **bash** (4.0+)
-- **jq** - JSON processor
-- **curl** - HTTP client
-
-### Script-Specific Requirements
-
-**deploy.sh:**
-- Terraform (>= 1.0)
-- AWS CLI (>= 2.0)
-- Docker (>= 20.10)
-
-**db-migrate.sh:**
-- Python 3.11+
-- Alembic (`pip install alembic`)
-- PostgreSQL client tools
-
-**manage-secrets.sh:**
-- Python 3.11+
-- AWS CLI
-- cryptography package (`pip install cryptography`)
-
-**backup-db.sh:**
-- PostgreSQL client tools (`pg_dump`, `psql`)
-- gzip
-
-### AWS Credentials
-
-Most scripts require AWS credentials configured:
-
-```bash
-aws configure
-# OR
-export AWS_ACCESS_KEY_ID=your-key
-export AWS_SECRET_ACCESS_KEY=your-secret
-export AWS_DEFAULT_REGION=us-east-1
-```
+AWS credentials must be configured (`aws configure` or environment variables).
 
 ---
 
-## Making Scripts Executable
-
-Before first use, make scripts executable:
+## Making scripts executable
 
 ```bash
 chmod +x scripts/*.sh
 ```
-
----
-
-## Common Workflows
-
-### Initial Setup
-
-```bash
-# 1. Generate application keys
-./scripts/manage-secrets.sh generate
-# Save output to backend/.env
-
-# 2. Configure Terraform
-cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-
-# 3. Deploy infrastructure
-./scripts/deploy.sh production apply
-
-# 4. Run database migrations
-./scripts/db-migrate.sh upgrade
-```
-
-### Daily Operations
-
-```bash
-# Health check
-./scripts/health-check.sh production https://your-domain.com
-
-# Create database backup
-./scripts/backup-db.sh production create
-
-# View application metrics
-curl https://your-domain.com/api/v1/performance/stats | jq .
-```
-
-### Deployment Updates
-
-```bash
-# Build and deploy new version
-./scripts/deploy.sh production plan
-./scripts/deploy.sh production apply
-
-# Check health after deployment
-./scripts/health-check.sh production https://your-domain.com
-```
-
-### Disaster Recovery
-
-```bash
-# List available backups
-./scripts/backup-db.sh production list
-
-# Restore from backup
-./scripts/backup-db.sh production restore
-
-# Run migrations if needed
-./scripts/db-migrate.sh upgrade
-```
-
----
-
-## Environment Variables
-
-Scripts support these environment variables:
-
-| Variable | Description | Used By |
-|----------|-------------|---------|
-| `BACKUP_S3_BUCKET` | S3 bucket for database backups | backup-db.sh |
-| `TERRAFORM_DIR` | Custom Terraform directory | deploy.sh |
-| `AWS_REGION` | AWS region | All AWS scripts |
-| `AWS_PROFILE` | AWS CLI profile | All AWS scripts |
-
----
-
-## Troubleshooting
-
-### "Permission denied" error
-
-Make scripts executable:
-```bash
-chmod +x scripts/*.sh
-```
-
-### "AWS credentials not configured"
-
-Configure AWS CLI:
-```bash
-aws configure
-```
-
-### "Terraform not found"
-
-Install Terraform:
-```bash
-# macOS
-brew install terraform
-
-# Linux
-wget https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_linux_amd64.zip
-unzip terraform_1.6.0_linux_amd64.zip
-sudo mv terraform /usr/local/bin/
-```
-
-### "pg_dump not found"
-
-Install PostgreSQL client:
-```bash
-# macOS
-brew install postgresql
-
-# Ubuntu/Debian
-sudo apt-get install postgresql-client
-
-# RHEL/CentOS
-sudo yum install postgresql
-```
-
----
-
-## Script Development
-
-### Adding New Scripts
-
-1. Create script in `scripts/` directory
-2. Add shebang: `#!/bin/bash`
-3. Set error handling: `set -e`
-4. Add usage documentation in comments
-5. Include color output functions
-6. Make executable: `chmod +x scripts/your-script.sh`
-7. Update this README
-
-### Best Practices
-
-- Use `set -e` for error handling
-- Provide help/usage information
-- Use colored output for better UX
-- Validate inputs and prerequisites
-- Add confirmation for destructive operations
-- Log important actions
-- Return meaningful exit codes
-
----
-
-## Support
-
-For issues with scripts:
-1. Check prerequisites are installed
-2. Verify AWS credentials
-3. Review script output for errors
-4. Check [DEPLOYMENT_GUIDE.md](../docs/DEPLOYMENT_GUIDE.md)
-5. Open an issue on GitHub
-
----
-
-## License
-
-[Your License Here]

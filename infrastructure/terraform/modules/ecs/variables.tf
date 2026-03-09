@@ -38,27 +38,17 @@ variable "task_role_arn" {
 }
 
 variable "backend_target_group_arn" {
-  description = "ARN of the backend target group"
-  type        = string
-}
-
-variable "frontend_target_group_arn" {
-  description = "ARN of the frontend target group"
+  description = "ARN of the backend ALB target group"
   type        = string
 }
 
 variable "backend_image" {
-  description = "Docker image for backend"
-  type        = string
-}
-
-variable "frontend_image" {
-  description = "Docker image for frontend"
+  description = "Docker image for the backend (FastAPI)"
   type        = string
 }
 
 variable "backend_task_cpu" {
-  description = "CPU units for backend task"
+  description = "CPU units for backend task (1024 = 1 vCPU)"
   type        = number
   default     = 1024
 }
@@ -69,20 +59,8 @@ variable "backend_task_memory" {
   default     = 2048
 }
 
-variable "frontend_task_cpu" {
-  description = "CPU units for frontend task"
-  type        = number
-  default     = 512
-}
-
-variable "frontend_task_memory" {
-  description = "Memory (MB) for frontend task"
-  type        = number
-  default     = 1024
-}
-
 variable "desired_count" {
-  description = "Desired number of tasks"
+  description = "Desired number of backend tasks"
   type        = number
   default     = 2
 }
@@ -139,7 +117,7 @@ variable "redis_port" {
 }
 
 variable "app_secrets_arn" {
-  description = "ARN of the application secrets"
+  description = "ARN of the application secrets in Secrets Manager"
   type        = string
   sensitive   = true
 }
@@ -149,15 +127,10 @@ variable "backend_log_group_name" {
   type        = string
 }
 
-variable "frontend_log_group_name" {
-  description = "Name of the frontend CloudWatch log group"
-  type        = string
-}
-
 variable "cors_allowed_origins" {
-  description = "List of allowed CORS origins for the backend API"
+  description = "Allowed CORS origins for the backend API (must include GitHub Pages URL)"
   type        = list(string)
-  default     = ["http://localhost:5173", "http://localhost:3000"]
+  default     = ["http://localhost:5173"]
 }
 
 variable "tags" {

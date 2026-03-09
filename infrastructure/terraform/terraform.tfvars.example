@@ -1,112 +1,106 @@
 # ============================================================================
-# AWS Cost Dashboard - Terraform Variables Example
+# AWS Cost Dashboard — Terraform Variables
 # ============================================================================
-# Copy this file to terraform.tfvars and fill in your values
-# DO NOT commit terraform.tfvars to version control!
+# Copy this file to terraform.tfvars and fill in your values.
+# DO NOT commit terraform.tfvars to version control.
+#
+# Architecture note:
+#   The frontend is hosted on GitHub Pages (static, free).
+#   Only the backend (FastAPI) runs on ECS Fargate.
+#   API Gateway acts as the public HTTPS entry point.
+# ============================================================================
 
-# AWS Region
+# AWS region
 aws_region = "us-east-1"
 
-# Environment (development, staging, production)
+# Environment
 environment = "production"
 
-# Project name (used for resource naming)
+# Project name (used in resource naming)
 project_name = "awscost"
 
 # VPC CIDR block
 vpc_cidr = "10.0.0.0/16"
 
 # ============================================================================
-# Database Configuration
+# Database (RDS PostgreSQL)
 # ============================================================================
 
-# RDS instance class (db.t3.micro, db.t3.small, db.t3.medium, db.t3.large)
-db_instance_class = "db.t3.medium"
-
-# RDS allocated storage in GB
+db_instance_class    = "db.t3.medium"
 db_allocated_storage = 100
 
-# Database master username
+# Master credentials — use strong random values
+# Generate: openssl rand -base64 24
 db_username = "dbadmin"
-
-# Database master password
-# IMPORTANT: Use a strong random password
-# Generate with: openssl rand -base64 32
 db_password = "REPLACE_WITH_STRONG_PASSWORD"
 
 # ============================================================================
-# ElastiCache Configuration
+# Cache (ElastiCache Redis)
 # ============================================================================
 
-# Redis node type (cache.t3.micro, cache.t3.small, cache.t3.medium)
-redis_node_type = "cache.t3.medium"
-
-# Number of cache nodes (2 or more for Multi-AZ)
-redis_num_cache_nodes = 2
+redis_node_type       = "cache.t3.medium"
+redis_num_cache_nodes = 2   # 2+ for Multi-AZ in production; 1 is fine for dev
 
 # ============================================================================
-# ECS Configuration
+# Application Secrets
 # ============================================================================
 
-# CPU units for ECS task (256, 512, 1024, 2048, 4096)
-ecs_task_cpu = "1024"
+# Generate with: openssl rand -hex 32
+secret_key     = "REPLACE_WITH_64_CHAR_HEX_STRING"
+jwt_secret_key = "REPLACE_WITH_64_CHAR_HEX_STRING"
 
-# Memory for ECS task in MB (512, 1024, 2048, 4096, 8192)
-ecs_task_memory = "2048"
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+encryption_key = "REPLACE_WITH_44_CHAR_FERNET_KEY="
 
-# Desired number of ECS tasks
-ecs_desired_count = 2
+# ============================================================================
+# ECS Fargate — Backend only
+# (The frontend Docker image exists but is served from GitHub Pages, not ECS)
+# ============================================================================
 
-# Docker images (replace with your registry)
-backend_image = "your-registry/awscost-backend:latest"
-frontend_image = "your-registry/awscost-frontend:latest"
-
-# Example for GitHub Container Registry:
-# backend_image = "ghcr.io/your-org/aws-cost-dashboard-backend:latest"
-# frontend_image = "ghcr.io/your-org/aws-cost-dashboard-frontend:latest"
-
-# Example for AWS ECR:
+# Backend image in your registry
+backend_image = "ghcr.io/your-org/aws-cost-dashboard-backend:latest"
+# AWS ECR example:
 # backend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/awscost-backend:latest"
-# frontend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/awscost-frontend:latest"
+
+backend_task_cpu    = 1024  # 1 vCPU
+backend_task_memory = 2048  # 2 GB
+
+ecs_desired_count = 2
+ecs_min_capacity  = 2
+ecs_max_capacity  = 10
 
 # ============================================================================
-# Optional: Custom Domain & SSL
+# API Gateway + CORS
+# ============================================================================
+#
+# IMPORTANT: The GitHub Pages URL MUST be listed here so the browser doesn't
+# block cross-origin requests to the API.
+#
+# After `terraform apply`, the api_gateway_url output gives you the URL to set
+# as VITE_API_BASE_URL in .env.production before building the frontend.
 # ============================================================================
 
-# Domain name for the application (optional)
-# Leave empty to use ALB DNS name
-domain_name = ""
+cors_allowed_origins = [
+  "https://YOUR-GITHUB-USERNAME.github.io",  # ← replace with your GitHub username
+  "http://localhost:5173",                    # local Vite dev server
+  "http://localhost:3000",                    # alternative local dev
+]
 
-# ACM certificate ARN for HTTPS (optional)
-# Leave empty to use HTTP only
+# Optional: custom domain for the API Gateway (e.g. api.example.com)
+# Requires a valid ACM certificate in the same region.
+custom_domain_name = ""
+# custom_domain_name = "api.your-domain.com"
+
+# ============================================================================
+# Optional: TLS certificate for the internal ALB
+# ============================================================================
+
 certificate_arn = ""
-
-# Example:
-# domain_name = "cost-dashboard.your-domain.com"
 # certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc123..."
 
 # ============================================================================
-# API Gateway Configuration
+# Optional: S3 bucket for report uploads
 # ============================================================================
 
-# CORS allowed origins (must include GitHub Pages URL and any custom domains)
-# IMPORTANT: Update with your actual GitHub Pages URL
-cors_allowed_origins = [
-  "https://your-username.github.io",  # Replace with your GitHub username
-  "http://localhost:5173",            # Local development
-  "http://localhost:3000",            # Alternative local dev
-]
-
-# Example for custom domain:
-# cors_allowed_origins = [
-#   "https://your-username.github.io",
-#   "https://dashboard.your-domain.com",
-#   "http://localhost:5173",
-# ]
-
-# Custom domain for API Gateway (optional)
-# If specified, must have a valid ACM certificate ARN above
-custom_domain_name = ""
-
-# Example:
-# custom_domain_name = "api.your-domain.com"
+s3_bucket_arn = ""
+# s3_bucket_arn = "arn:aws:s3:::your-reports-bucket"

@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # =============================================================================
-# build-prod.sh — Build and push production Docker images
+# build-prod.sh — Build production Docker images
 #
 # Usage:
 #   ./scripts/build-prod.sh [--push]
 #
 # Reads ALL config from .env.production at the project root.
 # Pass --push to push images to the registry after building.
+#
+# Architecture note:
+#   The frontend is primarily served from GitHub Pages (free, static).
+#   The frontend Docker image is built here for reference / self-hosted
+#   deployments, but is NOT deployed to ECS.
+#   For GitHub Pages deployment use: ./scripts/deploy-pages.sh
+#
+#   The backend Docker image IS deployed to ECS Fargate via Terraform.
 # =============================================================================
 set -euo pipefail
 
@@ -27,7 +35,7 @@ set -a
 source <(grep -v '^#' "$ENV_FILE" | grep -v '^$')
 set +a
 
-PUSH=${1:-}
+PUSH="${1:-}"
 
 # ---- Validate required vars --------------------------------------------------
 REQUIRED=(DOCKER_REGISTRY VERSION VITE_API_BASE_URL)
@@ -50,8 +58,13 @@ docker build \
   -t "$DOCKER_REGISTRY/aws-cost-dashboard-backend:$VERSION" \
   -t "$DOCKER_REGISTRY/aws-cost-dashboard-backend:latest" \
   "$ROOT_DIR/backend"
+echo "    ✓ Backend image built"
 
 # ---- Frontend image ----------------------------------------------------------
+# Note: The frontend is served from GitHub Pages in production.
+#       This image is built for reference / alternative self-hosted deployments.
+#       For GitHub Pages: ./scripts/deploy-pages.sh
+echo ""
 echo "--- Building frontend (baking VITE_* vars into bundle) ---"
 docker build \
   --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
@@ -62,18 +75,28 @@ docker build \
   -t "$DOCKER_REGISTRY/aws-cost-dashboard-frontend:$VERSION" \
   -t "$DOCKER_REGISTRY/aws-cost-dashboard-frontend:latest" \
   "$ROOT_DIR/frontend"
+echo "    ✓ Frontend image built"
 
 echo ""
 echo "=== Build complete ==="
 
 # ---- Push (optional) ---------------------------------------------------------
 if [[ "$PUSH" == "--push" ]]; then
+  echo ""
   echo "--- Pushing images to $DOCKER_REGISTRY ---"
   docker push "$DOCKER_REGISTRY/aws-cost-dashboard-backend:$VERSION"
   docker push "$DOCKER_REGISTRY/aws-cost-dashboard-backend:latest"
   docker push "$DOCKER_REGISTRY/aws-cost-dashboard-frontend:$VERSION"
   docker push "$DOCKER_REGISTRY/aws-cost-dashboard-frontend:latest"
   echo "=== Push complete ==="
+  echo ""
+  echo "Next step — update terraform.tfvars:"
+  echo "  backend_image = \"$DOCKER_REGISTRY/aws-cost-dashboard-backend:$VERSION\""
+  echo "Then run: ./scripts/deploy.sh production apply"
 else
-  echo "Tip: run with --push to push images to the registry."
+  echo ""
+  echo "Tips:"
+  echo "  Run with --push to push images to the registry."
+  echo "  Deploy backend to ECS : ./scripts/deploy.sh production apply"
+  echo "  Deploy frontend pages  : ./scripts/deploy-pages.sh"
 fi

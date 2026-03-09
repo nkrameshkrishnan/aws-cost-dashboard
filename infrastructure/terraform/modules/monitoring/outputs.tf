@@ -7,11 +7,6 @@ output "backend_log_group_name" {
   value       = aws_cloudwatch_log_group.backend.name
 }
 
-output "frontend_log_group_name" {
-  description = "Name of the frontend CloudWatch log group"
-  value       = aws_cloudwatch_log_group.frontend.name
-}
-
 output "ecs_task_execution_role_arn" {
   description = "ARN of the ECS task execution role"
   value       = aws_iam_role.ecs_task_execution.arn

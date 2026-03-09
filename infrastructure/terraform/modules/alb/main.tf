@@ -1,9 +1,10 @@
 # ==============================================================================
-# Application Load Balancer Module
+# Application Load Balancer Module — Backend only
 # ==============================================================================
-# Creates ALB, target groups, and listeners for the application
+# The ALB is internal (private), sitting between API Gateway (via VPC Link)
+# and the ECS backend tasks.  The frontend is served from GitHub Pages and
+# never touches this ALB.
 
-# Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.name_prefix}-alb"
   internal           = var.internal
@@ -11,8 +12,8 @@ resource "aws_lb" "main" {
   security_groups    = [var.alb_security_group_id]
   subnets            = var.internal ? var.private_subnet_ids : var.public_subnet_ids
 
-  enable_deletion_protection = var.enable_deletion_protection
-  enable_http2              = true
+  enable_deletion_protection       = var.enable_deletion_protection
+  enable_http2                     = true
   enable_cross_zone_load_balancing = true
 
   tags = merge(
@@ -23,7 +24,7 @@ resource "aws_lb" "main" {
   )
 }
 
-# Target Group - Backend
+# Target Group — Backend
 resource "aws_lb_target_group" "backend" {
   name                 = "${var.name_prefix}-backend-tg"
   port                 = 8000
@@ -51,57 +52,20 @@ resource "aws_lb_target_group" "backend" {
   )
 }
 
-# Target Group - Frontend
-resource "aws_lb_target_group" "frontend" {
-  name                 = "${var.name_prefix}-frontend-tg"
-  port                 = 80
-  protocol             = "HTTP"
-  vpc_id               = var.vpc_id
-  target_type          = "ip"
-  deregistration_delay = 30
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-  }
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.name_prefix}-frontend-tg"
-    }
-  )
-}
-
-# HTTP Listener (redirect to HTTPS if certificate provided, otherwise serve traffic)
+# HTTP Listener — forwards all traffic to the backend
+# (API Gateway terminates TLS before requests reach the ALB)
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
-    type = var.certificate_arn != "" ? "redirect" : "forward"
-
-    dynamic "redirect" {
-      for_each = var.certificate_arn != "" ? [1] : []
-      content {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
-    }
-
-    target_group_arn = var.certificate_arn != "" ? null : aws_lb_target_group.backend.arn
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
   }
 }
 
-# HTTPS Listener (only if certificate is provided)
+# HTTPS Listener — only provisioned when a certificate is supplied
 resource "aws_lb_listener" "https" {
   count = var.certificate_arn != "" ? 1 : 0
 
@@ -113,11 +77,11 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.backend.arn
   }
 }
 
-# Listener Rule - Backend API (HTTP)
+# Listener Rule — Backend API (HTTP)
 resource "aws_lb_listener_rule" "backend_http" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
@@ -129,12 +93,12 @@ resource "aws_lb_listener_rule" "backend_http" {
 
   condition {
     path_pattern {
-      values = ["/api/*", "/docs", "/redoc", "/openapi.json"]
+      values = ["/api/*", "/docs", "/redoc", "/openapi.json", "/health"]
     }
   }
 }
 
-# Listener Rule - Backend API (HTTPS)
+# Listener Rule — Backend API (HTTPS)
 resource "aws_lb_listener_rule" "backend_https" {
   count = var.certificate_arn != "" ? 1 : 0
 
@@ -148,7 +112,7 @@ resource "aws_lb_listener_rule" "backend_https" {
 
   condition {
     path_pattern {
-      values = ["/api/*", "/docs", "/redoc", "/openapi.json"]
+      values = ["/api/*", "/docs", "/redoc", "/openapi.json", "/health"]
     }
   }
 }

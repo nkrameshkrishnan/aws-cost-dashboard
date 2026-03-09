@@ -1,7 +1,8 @@
 # ==============================================================================
-# ECS Module
+# ECS Module — Backend only
 # ==============================================================================
-# Creates ECS cluster, task definitions, services, and auto-scaling
+# The frontend is served from GitHub Pages.
+# This module provisions only the backend Fargate service.
 
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
@@ -38,7 +39,10 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   }
 }
 
-# Task Definition - Backend
+# ==============================================================================
+# Task Definition — Backend (FastAPI)
+# ==============================================================================
+
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.name_prefix}-backend"
   requires_compatibilities = ["FARGATE"]
@@ -81,6 +85,7 @@ resource "aws_ecs_task_definition" "backend" {
           value = tostring(var.redis_port)
         },
         {
+          # GitHub Pages origin + any additional allowed origins
           name  = "CORS_ORIGINS_STR"
           value = join(",", var.cors_allowed_origins)
         }
@@ -128,66 +133,10 @@ resource "aws_ecs_task_definition" "backend" {
   )
 }
 
-# Task Definition - Frontend
-resource "aws_ecs_task_definition" "frontend" {
-  family                   = "${var.name_prefix}-frontend"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = var.frontend_task_cpu
-  memory                   = var.frontend_task_memory
-  execution_role_arn       = var.task_execution_role_arn
-  task_role_arn            = var.task_role_arn
+# ==============================================================================
+# ECS Service — Backend
+# ==============================================================================
 
-  container_definitions = jsonencode([
-    {
-      name      = "frontend"
-      image     = var.frontend_image
-      cpu       = var.frontend_task_cpu
-      memory    = var.frontend_task_memory
-      essential = true
-
-      portMappings = [
-        {
-          containerPort = 80
-          protocol      = "tcp"
-        }
-      ]
-
-      environment = [
-        {
-          name  = "ENVIRONMENT"
-          value = var.environment
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = var.frontend_log_group_name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "ecs"
-        }
-      }
-
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 30
-      }
-    }
-  ])
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.name_prefix}-frontend-task"
-    }
-  )
-}
-
-# ECS Service - Backend
 resource "aws_ecs_service" "backend" {
   name            = "${var.name_prefix}-backend-service"
   cluster         = aws_ecs_cluster.main.id
@@ -225,45 +174,10 @@ resource "aws_ecs_service" "backend" {
   )
 }
 
-# ECS Service - Frontend
-resource "aws_ecs_service" "frontend" {
-  name            = "${var.name_prefix}-frontend-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.frontend.arn
-  desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+# ==============================================================================
+# Auto-Scaling — Backend
+# ==============================================================================
 
-  network_configuration {
-    subnets          = var.private_subnet_ids
-    security_groups  = [var.ecs_security_group_id]
-    assign_public_ip = false
-  }
-
-  load_balancer {
-    target_group_arn = var.frontend_target_group_arn
-    container_name   = "frontend"
-    container_port   = 80
-  }
-
-  deployment_maximum_percent         = 200
-  deployment_minimum_healthy_percent = 100
-
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
-  enable_execute_command = true
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.name_prefix}-frontend-service"
-    }
-  )
-}
-
-# Auto-Scaling Target - Backend
 resource "aws_appautoscaling_target" "backend" {
   max_capacity       = var.max_capacity
   min_capacity       = var.min_capacity
@@ -272,7 +186,6 @@ resource "aws_appautoscaling_target" "backend" {
   service_namespace  = "ecs"
 }
 
-# Auto-Scaling Policy - Backend CPU
 resource "aws_appautoscaling_policy" "backend_cpu" {
   name               = "${var.name_prefix}-backend-cpu-autoscaling"
   policy_type        = "TargetTrackingScaling"
@@ -291,7 +204,6 @@ resource "aws_appautoscaling_policy" "backend_cpu" {
   }
 }
 
-# Auto-Scaling Policy - Backend Memory
 resource "aws_appautoscaling_policy" "backend_memory" {
   name               = "${var.name_prefix}-backend-memory-autoscaling"
   policy_type        = "TargetTrackingScaling"
@@ -305,34 +217,6 @@ resource "aws_appautoscaling_policy" "backend_memory" {
     }
 
     target_value       = 80.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
-  }
-}
-
-# Auto-Scaling Target - Frontend
-resource "aws_appautoscaling_target" "frontend" {
-  max_capacity       = var.max_capacity
-  min_capacity       = var.min_capacity
-  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.frontend.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
-# Auto-Scaling Policy - Frontend CPU
-resource "aws_appautoscaling_policy" "frontend_cpu" {
-  name               = "${var.name_prefix}-frontend-cpu-autoscaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.frontend.resource_id
-  scalable_dimension = aws_appautoscaling_target.frontend.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.frontend.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-
-    target_value       = 70.0
     scale_in_cooldown  = 300
     scale_out_cooldown = 60
   }

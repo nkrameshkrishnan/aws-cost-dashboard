@@ -1,10 +1,9 @@
 # ==============================================================================
 # Root Module Variables
 # ==============================================================================
-# These variables are used across multiple modules
 
 # ==============================================================================
-# General Configuration
+# General
 # ==============================================================================
 
 variable "aws_region" {
@@ -31,50 +30,50 @@ variable "environment" {
 }
 
 # ==============================================================================
-# Networking Configuration
+# Networking
 # ==============================================================================
 
 variable "vpc_cidr" {
-  description = "CIDR block for VPC"
+  description = "CIDR block for the VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
 # ==============================================================================
-# Database Configuration
+# Database (RDS PostgreSQL)
 # ==============================================================================
 
 variable "db_name" {
-  description = "Name of the PostgreSQL database"
+  description = "PostgreSQL database name"
   type        = string
   default     = "aws_cost_dashboard"
 }
 
 variable "db_username" {
-  description = "Master username for the database"
+  description = "Master username for RDS"
   type        = string
   sensitive   = true
 }
 
 variable "db_password" {
-  description = "Master password for the database"
+  description = "Master password for RDS"
   type        = string
   sensitive   = true
 
   validation {
     condition     = length(var.db_password) >= 8
-    error_message = "Database password must be at least 8 characters long."
+    error_message = "Database password must be at least 8 characters."
   }
 }
 
 variable "db_instance_class" {
-  description = "Instance class for RDS database"
+  description = "RDS instance class"
   type        = string
   default     = "db.t3.medium"
 }
 
 variable "db_allocated_storage" {
-  description = "Allocated storage in GB for RDS database"
+  description = "Allocated storage in GB for RDS"
   type        = number
   default     = 100
 }
@@ -86,17 +85,17 @@ variable "db_engine_version" {
 }
 
 # ==============================================================================
-# Redis Configuration
+# Cache (ElastiCache Redis)
 # ==============================================================================
 
 variable "redis_node_type" {
-  description = "Node type for ElastiCache Redis"
+  description = "ElastiCache node type"
   type        = string
   default     = "cache.t3.medium"
 }
 
 variable "redis_num_cache_nodes" {
-  description = "Number of cache nodes (1 for dev, 2+ for production)"
+  description = "Number of Redis cache nodes (1 for dev, 2+ for production)"
   type        = number
   default     = 2
 }
@@ -112,29 +111,29 @@ variable "redis_engine_version" {
 # ==============================================================================
 
 variable "secret_key" {
-  description = "Application secret key for session encryption"
+  description = "Application secret key (min 32 chars) — generate with: openssl rand -hex 32"
   type        = string
   sensitive   = true
 
   validation {
     condition     = length(var.secret_key) >= 32
-    error_message = "Secret key must be at least 32 characters long."
+    error_message = "Secret key must be at least 32 characters."
   }
 }
 
 variable "jwt_secret_key" {
-  description = "JWT secret key for token signing"
+  description = "JWT signing key (min 32 chars) — generate with: openssl rand -hex 32"
   type        = string
   sensitive   = true
 
   validation {
     condition     = length(var.jwt_secret_key) >= 32
-    error_message = "JWT secret key must be at least 32 characters long."
+    error_message = "JWT secret key must be at least 32 characters."
   }
 }
 
 variable "encryption_key" {
-  description = "Fernet encryption key for AWS credential encryption"
+  description = "Fernet key for credential encryption (44 chars) — generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
   type        = string
   sensitive   = true
 
@@ -145,16 +144,12 @@ variable "encryption_key" {
 }
 
 # ==============================================================================
-# ECS Configuration
+# ECS Fargate — Backend only
+# (Frontend is served from GitHub Pages, not ECS)
 # ==============================================================================
 
 variable "backend_image" {
-  description = "Docker image for backend application"
-  type        = string
-}
-
-variable "frontend_image" {
-  description = "Docker image for frontend application"
+  description = "Docker image for the backend (FastAPI). Example: ghcr.io/your-org/awscost-backend:1.0.0"
   type        = string
 }
 
@@ -170,52 +165,40 @@ variable "backend_task_memory" {
   default     = 2048
 }
 
-variable "frontend_task_cpu" {
-  description = "CPU units for frontend task (512 = 0.5 vCPU)"
-  type        = number
-  default     = 512
-}
-
-variable "frontend_task_memory" {
-  description = "Memory (MB) for frontend task"
-  type        = number
-  default     = 1024
-}
-
 variable "ecs_desired_count" {
-  description = "Desired number of ECS tasks"
+  description = "Desired number of backend ECS tasks"
   type        = number
   default     = 2
 }
 
 variable "ecs_min_capacity" {
-  description = "Minimum number of ECS tasks for auto-scaling"
+  description = "Minimum number of backend tasks (auto-scaling)"
   type        = number
   default     = 2
 }
 
 variable "ecs_max_capacity" {
-  description = "Maximum number of ECS tasks for auto-scaling"
+  description = "Maximum number of backend tasks (auto-scaling)"
   type        = number
   default     = 10
 }
 
 # ==============================================================================
-# Load Balancer Configuration
+# Load Balancer / TLS
 # ==============================================================================
 
 variable "certificate_arn" {
-  description = "ARN of ACM certificate for HTTPS (optional)"
+  description = "ACM certificate ARN for HTTPS on the internal ALB (optional)"
   type        = string
   default     = ""
 }
 
 # ==============================================================================
-# API Gateway Configuration
+# API Gateway + CORS
 # ==============================================================================
 
 variable "cors_allowed_origins" {
-  description = "List of allowed CORS origins for API Gateway (e.g., GitHub Pages URL, custom domains)"
+  description = "CORS origins allowed by the API Gateway and backend. Must include your GitHub Pages URL."
   type        = list(string)
   default     = [
     "http://localhost:5173",
@@ -229,17 +212,17 @@ variable "cors_allowed_origins" {
 }
 
 variable "custom_domain_name" {
-  description = "Custom domain name for API Gateway (e.g., api.example.com). Leave empty to use default API Gateway domain"
+  description = "Custom domain for API Gateway (e.g. api.example.com). Leave empty to use the default API Gateway URL."
   type        = string
   default     = ""
 }
 
 # ==============================================================================
-# Optional: S3 Bucket for Reports
+# Optional: S3 bucket for report uploads
 # ==============================================================================
 
 variable "s3_bucket_arn" {
-  description = "ARN of S3 bucket for report uploads (optional)"
+  description = "ARN of the S3 bucket used for report uploads (optional). Grants s3:PutObject to the ECS task role."
   type        = string
   default     = ""
 }

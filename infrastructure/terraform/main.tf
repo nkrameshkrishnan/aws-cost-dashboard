@@ -1,14 +1,30 @@
 # ==============================================================================
-# AWS Cost Dashboard - Modular Terraform Configuration
+# AWS Cost Dashboard — Terraform Root Configuration
 # ==============================================================================
-# This is the root configuration that orchestrates all modules
+#
+# Architecture
+# ───────────────────────────────────────────────────────────────────────────
+#  GitHub Pages (frontend)
+#       │  HTTPS API calls
+#       ▼
+#  API Gateway HTTP API  ←  CORS allows GitHub Pages origin
+#       │  VPC Link
+#       ▼
+#  Internal ALB  (private subnets)
+#       │
+#       ▼
+#  ECS Fargate — Backend (FastAPI, port 8000)
+#       │
+#       ├── RDS PostgreSQL
+#       ├── ElastiCache Redis
+#       └── AWS APIs (Cost Explorer, Budgets, EC2, RDS, Lambda …)
+# ───────────────────────────────────────────────────────────────────────────
 #
 # Usage:
-#   1. Copy terraform.tfvars.example to terraform.tfvars
-#   2. Edit terraform.tfvars with your values
-#   3. Run: terraform init
-#   4. Run: terraform plan
-#   5. Run: terraform apply
+#   1. Copy terraform.tfvars.example → terraform.tfvars and fill in values
+#   2. terraform init
+#   3. terraform plan
+#   4. terraform apply
 # ==============================================================================
 
 terraform {
@@ -58,7 +74,7 @@ locals {
 }
 
 # ==============================================================================
-# Networking Module
+# Networking
 # ==============================================================================
 
 module "networking" {
@@ -70,7 +86,7 @@ module "networking" {
 }
 
 # ==============================================================================
-# Security Module
+# Security Groups
 # ==============================================================================
 
 module "security" {
@@ -82,7 +98,7 @@ module "security" {
 }
 
 # ==============================================================================
-# Database Module
+# RDS PostgreSQL
 # ==============================================================================
 
 module "database" {
@@ -106,26 +122,26 @@ module "database" {
 }
 
 # ==============================================================================
-# Cache Module (ElastiCache Redis)
+# ElastiCache Redis
 # ==============================================================================
 
 module "cache" {
   source = "./modules/cache"
 
-  name_prefix             = local.name_prefix
-  node_type               = var.redis_node_type
-  num_cache_nodes         = var.redis_num_cache_nodes
-  engine_version          = var.redis_engine_version
-  private_subnet_ids      = module.networking.private_subnet_ids
-  security_group_id       = module.security.elasticache_security_group_id
+  name_prefix              = local.name_prefix
+  node_type                = var.redis_node_type
+  num_cache_nodes          = var.redis_num_cache_nodes
+  engine_version           = var.redis_engine_version
+  private_subnet_ids       = module.networking.private_subnet_ids
+  security_group_id        = module.security.elasticache_security_group_id
   snapshot_retention_limit = var.environment == "production" ? 5 : 0
-  tags                    = local.common_tags
+  tags                     = local.common_tags
 
   depends_on = [module.networking, module.security]
 }
 
 # ==============================================================================
-# Secrets Module
+# Secrets Manager
 # ==============================================================================
 
 module "secrets" {
@@ -148,7 +164,7 @@ module "secrets" {
 }
 
 # ==============================================================================
-# Monitoring Module
+# CloudWatch Logs + IAM Roles
 # ==============================================================================
 
 module "monitoring" {
@@ -167,7 +183,7 @@ module "monitoring" {
 }
 
 # ==============================================================================
-# ALB Module
+# Internal Application Load Balancer (backend only)
 # ==============================================================================
 
 module "alb" {
@@ -175,7 +191,7 @@ module "alb" {
 
   name_prefix                = local.name_prefix
   vpc_id                     = module.networking.vpc_id
-  internal                   = true  # Make ALB internal for API Gateway integration
+  internal                   = true  # Private ALB — accessed only via API Gateway VPC Link
   private_subnet_ids         = module.networking.private_subnet_ids
   public_subnet_ids          = module.networking.public_subnet_ids
   alb_security_group_id      = module.security.alb_security_group_id
@@ -187,42 +203,38 @@ module "alb" {
 }
 
 # ==============================================================================
-# ECS Module
+# ECS Fargate — Backend only
+# (Frontend is served from GitHub Pages)
 # ==============================================================================
 
 module "ecs" {
   source = "./modules/ecs"
 
-  name_prefix               = local.name_prefix
-  environment               = var.environment
-  aws_region                = var.aws_region
-  private_subnet_ids        = module.networking.private_subnet_ids
-  ecs_security_group_id     = module.security.ecs_tasks_security_group_id
-  task_execution_role_arn   = module.monitoring.ecs_task_execution_role_arn
-  task_role_arn             = module.monitoring.ecs_task_role_arn
-  backend_target_group_arn  = module.alb.backend_target_group_arn
-  frontend_target_group_arn = module.alb.frontend_target_group_arn
-  backend_image             = var.backend_image
-  frontend_image            = var.frontend_image
-  backend_task_cpu          = var.backend_task_cpu
-  backend_task_memory       = var.backend_task_memory
-  frontend_task_cpu         = var.frontend_task_cpu
-  frontend_task_memory      = var.frontend_task_memory
-  desired_count             = var.ecs_desired_count
-  min_capacity              = var.ecs_min_capacity
-  max_capacity              = var.ecs_max_capacity
-  db_username               = var.db_username
-  db_password               = var.db_password
-  db_endpoint               = module.database.address
-  db_port                   = module.database.port
-  db_name                   = var.db_name
-  redis_endpoint            = module.cache.primary_endpoint_address
-  redis_port                = module.cache.port
-  app_secrets_arn           = module.secrets.app_secrets_arn
-  backend_log_group_name    = module.monitoring.backend_log_group_name
-  frontend_log_group_name   = module.monitoring.frontend_log_group_name
-  cors_allowed_origins      = var.cors_allowed_origins
-  tags                      = local.common_tags
+  name_prefix              = local.name_prefix
+  environment              = var.environment
+  aws_region               = var.aws_region
+  private_subnet_ids       = module.networking.private_subnet_ids
+  ecs_security_group_id    = module.security.ecs_tasks_security_group_id
+  task_execution_role_arn  = module.monitoring.ecs_task_execution_role_arn
+  task_role_arn            = module.monitoring.ecs_task_role_arn
+  backend_target_group_arn = module.alb.backend_target_group_arn
+  backend_image            = var.backend_image
+  backend_task_cpu         = var.backend_task_cpu
+  backend_task_memory      = var.backend_task_memory
+  desired_count            = var.ecs_desired_count
+  min_capacity             = var.ecs_min_capacity
+  max_capacity             = var.ecs_max_capacity
+  db_username              = var.db_username
+  db_password              = var.db_password
+  db_endpoint              = module.database.address
+  db_port                  = module.database.port
+  db_name                  = var.db_name
+  redis_endpoint           = module.cache.primary_endpoint_address
+  redis_port               = module.cache.port
+  app_secrets_arn          = module.secrets.app_secrets_arn
+  backend_log_group_name   = module.monitoring.backend_log_group_name
+  cors_allowed_origins     = var.cors_allowed_origins
+  tags                     = local.common_tags
 
   depends_on = [
     module.networking,
@@ -236,7 +248,7 @@ module "ecs" {
 }
 
 # ==============================================================================
-# VPC Link Module (connects API Gateway to private ALB)
+# VPC Link (connects API Gateway to the private ALB)
 # ==============================================================================
 
 module "vpc_link" {
@@ -251,7 +263,7 @@ module "vpc_link" {
 }
 
 # ==============================================================================
-# API Gateway Module (HTTP API front door)
+# API Gateway HTTP API (public entry point for the GitHub Pages frontend)
 # ==============================================================================
 
 module "api_gateway" {
@@ -272,29 +284,29 @@ module "api_gateway" {
 # Outputs
 # ==============================================================================
 
-output "alb_dns_name" {
-  description = "DNS name of the Application Load Balancer"
-  value       = module.alb.alb_dns_name
+output "api_gateway_url" {
+  description = "API Gateway invoke URL — set this as VITE_API_BASE_URL in .env.production before building"
+  value       = module.api_gateway.api_invoke_url
 }
 
-output "alb_url" {
-  description = "URL to access the application"
-  value       = var.certificate_arn != "" ? "https://${module.alb.alb_dns_name}" : "http://${module.alb.alb_dns_name}"
+output "api_gateway_id" {
+  description = "ID of the API Gateway HTTP API"
+  value       = module.api_gateway.api_id
+}
+
+output "custom_domain_url" {
+  description = "Custom domain URL for the API (if configured)"
+  value       = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : ""
 }
 
 output "ecs_cluster_name" {
-  description = "Name of the ECS cluster"
+  description = "ECS cluster name"
   value       = module.ecs.cluster_name
 }
 
 output "backend_service_name" {
-  description = "Name of the backend ECS service"
+  description = "ECS backend service name"
   value       = module.ecs.backend_service_name
-}
-
-output "frontend_service_name" {
-  description = "Name of the frontend ECS service"
-  value       = module.ecs.frontend_service_name
 }
 
 output "rds_endpoint" {
@@ -310,40 +322,11 @@ output "redis_endpoint" {
 }
 
 output "vpc_id" {
-  description = "ID of the VPC"
+  description = "VPC ID"
   value       = module.networking.vpc_id
 }
 
 output "private_subnet_ids" {
-  description = "IDs of private subnets"
+  description = "Private subnet IDs"
   value       = module.networking.private_subnet_ids
-}
-
-output "public_subnet_ids" {
-  description = "IDs of public subnets"
-  value       = module.networking.public_subnet_ids
-}
-
-# ==============================================================================
-# API Gateway Outputs
-# ==============================================================================
-
-output "api_gateway_url" {
-  description = "API Gateway invoke URL (use this as VITE_API_BASE_URL)"
-  value       = module.api_gateway.api_invoke_url
-}
-
-output "api_gateway_id" {
-  description = "ID of the API Gateway HTTP API"
-  value       = module.api_gateway.api_id
-}
-
-output "api_gateway_endpoint" {
-  description = "Base endpoint URL of the API Gateway"
-  value       = module.api_gateway.api_endpoint
-}
-
-output "custom_domain_url" {
-  description = "Custom domain URL (if configured)"
-  value       = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : ""
 }

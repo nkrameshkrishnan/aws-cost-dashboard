@@ -22,17 +22,12 @@ output "backend_target_group_arn" {
   value       = aws_lb_target_group.backend.arn
 }
 
-output "frontend_target_group_arn" {
-  description = "ARN of the frontend target group"
-  value       = aws_lb_target_group.frontend.arn
-}
-
 output "http_listener_arn" {
-  description = "ARN of the HTTP listener"
+  description = "ARN of the HTTP listener (used by API Gateway VPC Link integration)"
   value       = aws_lb_listener.http.arn
 }
 
 output "https_listener_arn" {
-  description = "ARN of the HTTPS listener (if certificate provided)"
+  description = "ARN of the HTTPS listener (empty string if no certificate provided)"
   value       = var.certificate_arn != "" ? aws_lb_listener.https[0].arn : ""
 }
