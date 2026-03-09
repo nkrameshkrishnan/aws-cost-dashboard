@@ -3,7 +3,7 @@ API v1 router - aggregates all v1 endpoints.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import costs, health, aws_accounts, budgets, finops, teams, automation, analytics, kpi, export, unit_costs, rightsizing, debug, performance
+from app.api.v1.endpoints import costs, health, aws_accounts, budgets, finops, teams, automation, analytics, kpi, export, unit_costs, rightsizing, performance
 
 api_router = APIRouter()
 
@@ -20,7 +20,6 @@ api_router.include_router(kpi.router, prefix="/kpi", tags=["kpi"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(unit_costs.router, prefix="/unit-costs", tags=["unit-costs"])
 api_router.include_router(rightsizing.router, prefix="/rightsizing", tags=["rightsizing"])
-api_router.include_router(debug.router, prefix="/debug", tags=["debug"])
 api_router.include_router(performance.router, prefix="/performance", tags=["performance"])
 
 # TODO: Add more routers as they are implemented

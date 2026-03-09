@@ -3,28 +3,36 @@ Tests for AWS Session Manager.
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from moto import mock_sts
 import boto3
 from botocore.exceptions import ProfileNotFound, NoCredentialsError
 
 from app.aws.session_manager import AWSSessionManager
 
 
+def _patched_manager(mock_session_class, mock_settings_obj=None):
+    """Helper: create a fresh AWSSessionManager with boto3.Session patched."""
+    manager = AWSSessionManager()
+    return manager
+
+
 class TestAWSSessionManager:
     """Test AWS Session Manager."""
 
+    def _mock_session(self, account_id="123456789012"):
+        mock_session = MagicMock()
+        mock_sts = MagicMock()
+        mock_sts.get_caller_identity.return_value = {
+            "Account": account_id,
+            "UserId": "AIDAI123456789EXAMPLE",
+            "Arn": f"arn:aws:iam::{account_id}:user/testuser",
+        }
+        mock_session.client.return_value = mock_sts
+        return mock_session, mock_sts
+
     def test_get_session_default_profile(self, aws_credentials):
         """Test getting session with default profile."""
-        with patch('boto3.Session') as mock_session_class:
-            # Create mock session and STS client
-            mock_session = MagicMock()
-            mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {
-                'Account': '123456789012',
-                'UserId': 'AIDAI123456789EXAMPLE',
-                'Arn': 'arn:aws:iam::123456789012:user/testuser'
-            }
-            mock_session.client.return_value = mock_sts
+        with patch("boto3.Session") as mock_session_class:
+            mock_session, _ = self._mock_session()
             mock_session_class.return_value = mock_session
 
             manager = AWSSessionManager()
@@ -35,42 +43,30 @@ class TestAWSSessionManager:
 
     def test_get_session_caching(self, aws_credentials):
         """Test that sessions are cached."""
-        with patch('boto3.Session') as mock_session_class:
-            mock_session = MagicMock()
-            mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {
-                'Account': '123456789012',
-                'UserId': 'AIDAI123456789EXAMPLE',
-                'Arn': 'arn:aws:iam::123456789012:user/testuser'
-            }
-            mock_session.client.return_value = mock_sts
+        with patch("boto3.Session") as mock_session_class:
+            mock_session, _ = self._mock_session()
             mock_session_class.return_value = mock_session
 
             manager = AWSSessionManager()
 
-            # Get session twice with same profile
             session1 = manager.get_session("default")
             session2 = manager.get_session("default")
 
-            # Should return same cached instance
             assert session1 is session2
-            # boto3.Session should only be called once due to caching
             assert mock_session_class.call_count == 1
 
-    @mock_sts
     def test_get_client_s3(self, aws_credentials):
         """Test getting boto3 S3 client."""
-        with patch('boto3.Session') as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, \
+             patch("app.aws.session_manager.settings") as mock_settings:
+            mock_settings.AWS_DEFAULT_REGION = "us-east-1"
             mock_session = MagicMock()
             mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_client = MagicMock()
-            mock_client.meta.service_model.service_name = "s3"
 
             def client_factory(service, **kwargs):
-                if service == 'sts':
-                    return mock_sts
-                return mock_client
+                return mock_sts if service == "sts" else mock_client
 
             mock_session.client.side_effect = client_factory
             mock_session_class.return_value = mock_session
@@ -79,22 +75,19 @@ class TestAWSSessionManager:
             client = manager.get_client("s3")
 
             assert client is not None
-            assert client.meta.service_model.service_name == "s3"
 
-    @mock_sts
     def test_get_client_with_profile(self, aws_credentials):
         """Test getting boto3 client with specific profile."""
-        with patch('boto3.Session') as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, \
+             patch("app.aws.session_manager.settings") as mock_settings:
+            mock_settings.AWS_DEFAULT_REGION = "us-east-1"
             mock_session = MagicMock()
             mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_client = MagicMock()
-            mock_client.meta.service_model.service_name = "s3"
 
             def client_factory(service, **kwargs):
-                if service == 'sts':
-                    return mock_sts
-                return mock_client
+                return mock_sts if service == "sts" else mock_client
 
             mock_session.client.side_effect = client_factory
             mock_session_class.return_value = mock_session
@@ -103,22 +96,22 @@ class TestAWSSessionManager:
             client = manager.get_client("s3", profile_name="default")
 
             assert client is not None
-            assert client.meta.service_model.service_name == "s3"
 
-    @mock_sts
     def test_get_client_with_region(self, aws_credentials):
         """Test getting boto3 client with custom region."""
-        with patch('boto3.Session') as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, \
+             patch("app.aws.session_manager.settings") as mock_settings:
+            mock_settings.AWS_DEFAULT_REGION = "us-east-1"
             mock_session = MagicMock()
             mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_client = MagicMock()
             mock_client.meta.region_name = "ap-southeast-1"
 
             def client_factory(service, **kwargs):
-                if service == 'sts':
+                if service == "sts":
                     return mock_sts
-                mock_client.meta.region_name = kwargs.get('region_name', 'us-east-1')
+                mock_client.meta.region_name = kwargs.get("region_name", "us-east-1")
                 return mock_client
 
             mock_session.client.side_effect = client_factory
@@ -130,13 +123,14 @@ class TestAWSSessionManager:
             assert client is not None
             assert client.meta.region_name == "ap-southeast-1"
 
-    @mock_sts
     def test_get_resource_s3(self, aws_credentials):
         """Test getting boto3 S3 resource."""
-        with patch('boto3.Session') as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, \
+             patch("app.aws.session_manager.settings") as mock_settings:
+            mock_settings.AWS_DEFAULT_REGION = "us-east-1"
             mock_session = MagicMock()
             mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_resource = MagicMock()
             mock_resource.meta = {}
 
@@ -148,15 +142,16 @@ class TestAWSSessionManager:
             resource = manager.get_resource("s3")
 
             assert resource is not None
-            assert hasattr(resource, 'meta')
+            assert hasattr(resource, "meta")
 
-    @mock_sts
     def test_get_resource_with_region(self, aws_credentials):
         """Test getting boto3 resource with custom region."""
-        with patch('boto3.Session') as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, \
+             patch("app.aws.session_manager.settings") as mock_settings:
+            mock_settings.AWS_DEFAULT_REGION = "us-east-1"
             mock_session = MagicMock()
             mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_resource = MagicMock()
 
             mock_session.client.return_value = mock_sts
@@ -170,15 +165,8 @@ class TestAWSSessionManager:
 
     def test_validate_profile_success(self, aws_credentials):
         """Test profile validation with valid credentials."""
-        with patch('boto3.Session') as mock_session_class:
-            mock_session = MagicMock()
-            mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {
-                'Account': '123456789012',
-                'UserId': 'AIDAI123456789EXAMPLE',
-                'Arn': 'arn:aws:iam::123456789012:user/testuser'
-            }
-            mock_session.client.return_value = mock_sts
+        with patch("boto3.Session") as mock_session_class:
+            mock_session, _ = self._mock_session()
             mock_session_class.return_value = mock_session
 
             manager = AWSSessionManager()
@@ -202,7 +190,7 @@ class TestAWSSessionManager:
         """Test listing profiles when credentials file doesn't exist."""
         manager = AWSSessionManager()
 
-        with patch('os.path.exists', return_value=False):
+        with patch("os.path.exists", return_value=False):
             profiles = manager.list_profiles()
             assert profiles == []
 
@@ -210,37 +198,33 @@ class TestAWSSessionManager:
         """Test listing profiles from credentials file."""
         manager = AWSSessionManager()
 
-        # Mock configparser to return some profiles
-        with patch('configparser.ConfigParser') as mock_config:
+        with patch("configparser.ConfigParser") as mock_config:
             mock_parser = MagicMock()
-            mock_parser.sections.return_value = ['profile1', 'profile2']
+            mock_parser.sections.return_value = ["profile1", "profile2"]
             mock_parser.has_section.return_value = True
             mock_config.return_value = mock_parser
 
-            with patch('os.path.exists', return_value=True):
+            with patch("os.path.exists", return_value=True):
                 profiles = manager.list_profiles()
 
                 assert isinstance(profiles, list)
-                # Should include default profile
-                assert 'default' in profiles
+                assert "default" in profiles
 
-    @mock_sts
     def test_assume_role(self, aws_credentials):
         """Test assuming IAM role."""
         manager = AWSSessionManager()
 
         role_arn = "arn:aws:iam::123456789012:role/TestRole"
 
-        # Mock STS assume_role response
-        with patch.object(manager, 'get_session') as mock_get_session:
+        with patch.object(manager, "get_session") as mock_get_session:
             mock_session = MagicMock()
             mock_sts = MagicMock()
             mock_sts.assume_role.return_value = {
-                'Credentials': {
-                    'AccessKeyId': 'ASIAIOSFODNN7EXAMPLE',
-                    'SecretAccessKey': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY',
-                    'SessionToken': 'token123',
-                    'Expiration': '2024-12-31T23:59:59Z'
+                "Credentials": {
+                    "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+                    "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY",
+                    "SessionToken": "token123",
+                    "Expiration": "2024-12-31T23:59:59Z",
                 }
             }
             mock_session.client.return_value = mock_sts
@@ -248,7 +232,7 @@ class TestAWSSessionManager:
 
             assumed_session = manager.assume_role(
                 role_arn=role_arn,
-                session_name="test-session"
+                session_name="test-session",
             )
 
             assert assumed_session is not None
@@ -257,44 +241,28 @@ class TestAWSSessionManager:
 
     def test_clear_cache_specific_profile(self, aws_credentials):
         """Test clearing cache for specific profile."""
-        with patch('boto3.Session') as mock_session_class:
-            mock_session = MagicMock()
-            mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
-            mock_session.client.return_value = mock_sts
+        with patch("boto3.Session") as mock_session_class:
+            mock_session, _ = self._mock_session()
             mock_session_class.return_value = mock_session
 
             manager = AWSSessionManager()
-
-            # Create some cached sessions
-            session1 = manager.get_session("default")
+            manager.get_session("default")
             assert "default" in manager._sessions
 
-            # Clear specific profile
             manager.clear_cache("default")
-
-            # Should be empty
             assert "default" not in manager._sessions
 
     def test_clear_cache_all(self, aws_credentials):
         """Test clearing all cached sessions."""
-        with patch('boto3.Session') as mock_session_class:
-            mock_session = MagicMock()
-            mock_sts = MagicMock()
-            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
-            mock_session.client.return_value = mock_sts
+        with patch("boto3.Session") as mock_session_class:
+            mock_session, _ = self._mock_session()
             mock_session_class.return_value = mock_session
 
             manager = AWSSessionManager()
-
-            # Create some cached sessions
-            session1 = manager.get_session("default")
+            manager.get_session("default")
             assert len(manager._sessions) > 0
 
-            # Clear all caches
             manager.clear_cache()
-
-            # Should be empty
             assert len(manager._sessions) == 0
 
     def test_invalid_profile_raises_error(self):

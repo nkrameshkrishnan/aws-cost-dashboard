@@ -4,7 +4,7 @@ Tests for cost processor service.
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
-from moto import mock_ce
+from moto import mock_aws
 
 from app.services.cost_processor import CostProcessor, aggregate_multi_profile_costs
 
@@ -12,7 +12,7 @@ from app.services.cost_processor import CostProcessor, aggregate_multi_profile_c
 class TestCostProcessor:
     """Test cost processor service."""
 
-    @mock_ce
+    @mock_aws
     def test_get_daily_costs(self, aws_credentials):
         """Test getting daily cost breakdown."""
         with patch('app.services.cost_processor.CostExplorerService') as mock_ce_service:
@@ -62,7 +62,7 @@ class TestCostProcessor:
                 assert result[1]["date"] == "2024-01-02"
                 assert result[1]["cost"] == 150.75
 
-    @mock_ce
+    @mock_aws
     def test_get_cost_summary(self, aws_credentials):
         """Test getting cost summary."""
         with patch('app.services.cost_processor.CostExplorerService') as mock_ce_service:
@@ -95,7 +95,7 @@ class TestCostProcessor:
                 assert result["currency"] == "USD"
                 assert result["profile_name"] == "default"
 
-    @mock_ce
+    @mock_aws
     def test_get_service_breakdown(self, aws_credentials):
         """Test getting service breakdown."""
         with patch('app.services.cost_processor.CostExplorerService') as mock_ce_service:
@@ -140,7 +140,7 @@ class TestCostProcessor:
                 assert result[1]["service"] == "Amazon RDS"
                 assert result[1]["cost"] == 150.00
 
-    @mock_ce
+    @mock_aws
     def test_calculate_mom_change(self, aws_credentials):
         """Test month-over-month change calculation."""
         with patch('app.services.cost_processor.CostExplorerService') as mock_ce_service:

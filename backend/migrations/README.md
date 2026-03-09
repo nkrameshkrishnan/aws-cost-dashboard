@@ -1,54 +1,47 @@
-# Database Migrations
+# Database Migrations — Legacy (Archived)
 
-This directory contains manual SQL migrations for the AWS Cost Dashboard database.
+> ⚠️ **This directory is archived.**  Alembic is now the source of truth for all
+> schema changes.  Do not add new SQL files here.  See `backend/alembic/` instead.
 
-## How to Apply Migrations
+The SQL file in this directory (`001_add_webhook_type_column.sql`) has been
+superseded by Alembic migration `0002_add_webhook_type_column`.
 
-### Using Docker
+## Migrating an Existing Database
 
-To apply a migration to the database running in Docker:
+If your database was created with `create_all()` before Alembic was introduced,
+stamp it at the baseline revision and then apply any outstanding migrations:
 
 ```bash
-docker exec aws-cost-db psql -U postgres -d aws_cost_dashboard -f /path/to/migration.sql
+# From the backend/ directory:
+alembic stamp 0001   # marks DB as already at the initial-schema baseline
+alembic upgrade head  # applies 0002 (webhook_type column) and any future migrations
 ```
 
-Or copy the SQL file into the container and run it:
+After this, new deployments will run `alembic upgrade head` automatically on
+startup via `upgrade_db()` in `app/database/base.py`.
+
+## Common Alembic Commands
 
 ```bash
-docker cp migrations/001_add_webhook_type_column.sql aws-cost-db:/tmp/
-docker exec aws-cost-db psql -U postgres -d aws_cost_dashboard -f /tmp/001_add_webhook_type_column.sql
-```
+# Apply all pending migrations
+alembic upgrade head
 
-### Using psql Directly
+# Roll back one revision
+alembic downgrade -1
 
-If you have direct access to the database:
+# Show current revision on the live database
+alembic current
 
-```bash
-psql -U postgres -d aws_cost_dashboard -f migrations/001_add_webhook_type_column.sql
+# Show migration history
+alembic history --verbose
+
+# Auto-generate a new migration from model changes
+alembic revision --autogenerate -m "describe your change here"
 ```
 
 ## Migration History
 
-| # | Date | Description | Applied |
-|---|------|-------------|---------|
-| 001 | 2026-02-10 | Add webhook_type column for Power Automate support | ✅ |
-
-## Future: Alembic Integration
-
-For production deployments, consider migrating to Alembic for automated schema migrations:
-
-```bash
-# Install Alembic
-pip install alembic
-
-# Initialize Alembic
-alembic init alembic
-
-# Auto-generate migrations from models
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-```
-
-See [Alembic documentation](https://alembic.sqlalchemy.org/) for more details.
+| Revision | Date       | Description                                      |
+|----------|------------|--------------------------------------------------|
+| 0001     | 2026-01-01 | Initial schema (aws_accounts, budgets, teams_webhooks, business_metrics, async_jobs) |
+| 0002     | 2026-02-10 | Add webhook_type column to teams_webhooks        |

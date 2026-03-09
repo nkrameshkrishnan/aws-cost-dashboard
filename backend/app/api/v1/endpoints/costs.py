@@ -21,10 +21,10 @@ from app.schemas.cost import (
     DrillDownResponse,
     DrillDownRecord
 )
-from app.services.cost_processor import CostProcessor, aggregate_multi_profile_costs
+from app.services.cost_processor import aggregate_multi_profile_costs
 from app.services.cost_processor_db import DatabaseCostProcessor
 from app.database.base import get_db
-# from app.core.security import get_current_active_user  # Temporarily disabled for testing
+from app.core.security import get_current_active_user
 from sqlalchemy.orm import Session as DBSession
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ router = APIRouter()
 async def get_dashboard_data(
     profile_name: str = Query(..., description="AWS account name"),
     db: DBSession = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Optimized endpoint that fetches all dashboard data in a single request.
@@ -133,7 +134,7 @@ async def get_cost_summary(
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get cost summary for a specific account and date range.
@@ -155,7 +156,7 @@ async def get_daily_costs(
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get daily cost breakdown using database-stored credentials.
@@ -185,7 +186,7 @@ async def get_service_breakdown(
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     top_n: int = Query(10, description="Number of top services to return"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get cost breakdown by AWS service using database credentials.
@@ -213,7 +214,7 @@ async def get_cost_trend(
     profile_name: str = Query(..., description="AWS profile name"),
     months: int = Query(6, description="Number of months to include"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get monthly cost trend for the past N months using database credentials.
@@ -239,7 +240,7 @@ async def get_mom_comparison(
     current_month_start: str = Query(..., description="Current month start (YYYY-MM-DD)"),
     current_month_end: str = Query(..., description="Current month end (YYYY-MM-DD)"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get month-over-month cost comparison using database credentials.
@@ -266,7 +267,7 @@ async def get_yoy_comparison(
     current_period_start: str = Query(..., description="Current period start (YYYY-MM-DD)"),
     current_period_end: str = Query(..., description="Current period end (YYYY-MM-DD)"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get year-over-year cost comparison using database credentials.
@@ -293,7 +294,7 @@ async def get_cost_forecast(
     days: int = Query(30, description="Number of days to forecast"),
     granularity: str = Query("MONTHLY", description="Granularity: DAILY or MONTHLY"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get cost forecast for the next N days using database credentials.
@@ -318,7 +319,7 @@ async def get_multi_profile_costs(
     profile_names: List[str] = Query(..., description="List of AWS profile names"),
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get aggregated costs across multiple AWS profiles.
@@ -346,7 +347,7 @@ async def get_cost_drill_down(
     region: Optional[str] = Query(None, description="Filter by specific region"),
     account_id: Optional[str] = Query(None, description="Filter by specific linked account"),
     db: DBSession = Depends(get_db),
-    # current_user: dict = Depends(get_current_active_user)  # Temporarily disabled for testing
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Get cost breakdown by a specific dimension with optional filters.

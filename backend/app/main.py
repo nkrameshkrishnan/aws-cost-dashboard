@@ -66,13 +66,15 @@ async def startup_event():
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
 
-    # Initialize database tables
-    from app.database.base import init_db
+    # Apply any pending Alembic migrations before serving traffic.
+    # For a fresh database this creates all tables; for an existing database
+    # it only applies migrations that haven't run yet.
+    from app.database.base import upgrade_db
     try:
-        init_db()
-        logger.info("Database tables initialized")
+        upgrade_db()
+        logger.info("Database schema is up to date")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"Failed to run database migrations: {e}")
 
     # Initialize scheduler for automated jobs
     from app.services.scheduler_service import SchedulerService
@@ -109,8 +111,23 @@ async def shutdown_event():
     except Exception as e:
         logger.error(f"Error shutting down scheduler: {e}")
 
-    # TODO: Close database connections
-    # TODO: Close Redis connections
+    # Dispose the SQLAlchemy connection pool so the process exits cleanly
+    # without waiting for idle connections to time out.
+    from app.database.base import engine
+    try:
+        engine.dispose()
+        logger.info("Database connection pool disposed")
+    except Exception as e:
+        logger.error(f"Error disposing database connections: {e}")
+
+    # Close the Redis connection that the global CacheManager holds.
+    from app.core.cache import cache_manager
+    try:
+        if cache_manager.redis_client is not None:
+            cache_manager.redis_client.close()
+            logger.info("Redis connection closed")
+    except Exception as e:
+        logger.error(f"Error closing Redis connection: {e}")
 
 
 @app.get("/")
