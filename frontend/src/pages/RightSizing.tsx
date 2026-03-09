@@ -127,16 +127,16 @@ export function RightSizing() {
 
       switch (sortField) {
         case 'savings':
-          compareValue = a.estimated_monthly_savings - b.estimated_monthly_savings
+          compareValue = (a.estimated_monthly_savings ?? 0) - (b.estimated_monthly_savings ?? 0)
           break
         case 'finding':
-          compareValue = a.finding.localeCompare(b.finding)
+          compareValue = (a.finding ?? '').localeCompare(b.finding ?? '')
           break
         case 'resource_type':
-          compareValue = a.resource_type.localeCompare(b.resource_type)
+          compareValue = (a.resource_type ?? '').localeCompare(b.resource_type ?? '')
           break
         case 'resource_name':
-          compareValue = a.resource_name.localeCompare(b.resource_name)
+          compareValue = (a.resource_name ?? '').localeCompare(b.resource_name ?? '')
           break
       }
 
@@ -324,7 +324,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
               <DollarSign className="w-6 h-6 text-brandRed-700" />
             </div>
             <div className="text-3xl font-bold text-brandRed-700">
-              ${summary.total_potential_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(summary.total_potential_savings ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-600 mt-1">
               {summary.total_ec2_recommendations + summary.total_ebs_recommendations + summary.total_lambda_recommendations + summary.total_asg_recommendations} recommendations
@@ -396,7 +396,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
       )}
 
       {/* Top Savings Opportunities */}
-      {topOpportunities && topOpportunities.length > 0 && (
+      {topOpportunities && Array.isArray(topOpportunities) && topOpportunities.length > 0 && (
         <div className="card mb-8 bg-gradient-to-br from-modernGreen-50 to-modernTeal-50 border border-modernGreen-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-modernGreen-700" />
@@ -423,7 +423,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
                   </div>
                   <div className="text-right ml-4">
                     <div className="text-2xl font-bold text-modernGreen-700">
-                      ${opp.estimated_monthly_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${(opp.estimated_monthly_savings ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div className="text-xs text-gray-500">per month</div>
                   </div>
@@ -565,7 +565,7 @@ Best Practice: Start with recommendations that have low performance risk and hig
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-bold text-modernGreen-700">
-                      ${rec.estimated_monthly_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${(rec.estimated_monthly_savings ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     {rec.savings_percentage != null && (
                       <div className="text-xs text-gray-500">

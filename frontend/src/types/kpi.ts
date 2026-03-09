@@ -71,7 +71,8 @@ export function getKPIStatusColor(status: KPIStatus): string {
 }
 
 // Helper function to format KPI value
-export function formatKPIValue(value: number, format: string): string {
+export function formatKPIValue(value: number | null | undefined, format: string): string {
+  if (value == null) return 'N/A'
   switch (format) {
     case 'currency':
       return new Intl.NumberFormat('en-US', {

@@ -194,7 +194,7 @@ export function Automation() {
           </div>
         ) : (
           <div className="divide-y divide-modernGray-200">
-            {jobsData.jobs.map((job) => (
+            {(Array.isArray(jobsData?.jobs) ? jobsData.jobs : []).map((job) => (
               <div
                 key={job.job_id}
                 className="p-6 hover:bg-modernGray-50 transition-colors"

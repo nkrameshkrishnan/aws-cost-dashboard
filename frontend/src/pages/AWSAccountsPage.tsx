@@ -196,7 +196,7 @@ export function AWSAccountsPage() {
         <SkeletonList count={3} />
       ) : accounts && Array.isArray(accounts) && accounts.length > 0 ? (
         <div className="grid gap-4">
-          {accounts.map((account: AWSAccount) => (
+          {(Array.isArray(accounts) ? accounts : []).map((account: AWSAccount) => (
             <div key={account.id} className="card">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
