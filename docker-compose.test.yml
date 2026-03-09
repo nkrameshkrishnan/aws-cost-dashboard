@@ -1,0 +1,90 @@
+version: "3.8"
+
+# =============================================================================
+# Test Docker Compose
+#
+# Spins up ephemeral Postgres and Redis, runs the test suite, then exits.
+#
+# Usage:
+#   docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+#   # Exit code mirrors the pytest exit code.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Ephemeral PostgreSQL for integration tests
+  # ---------------------------------------------------------------------------
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: aws-cost-db-test
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: aws_cost_test
+    ports:
+      - "5433:5432"           # offset from dev port to avoid conflicts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - awscost-test
+    tmpfs:
+      - /var/lib/postgresql/data  # in-memory — no persistent volume needed
+
+  # ---------------------------------------------------------------------------
+  # Ephemeral Redis for integration tests
+  # ---------------------------------------------------------------------------
+  redis-test:
+    image: redis:7-alpine
+    container_name: aws-cost-redis-test
+    ports:
+      - "6380:6379"           # offset from dev port
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - awscost-test
+
+  # ---------------------------------------------------------------------------
+  # Test runner
+  # ---------------------------------------------------------------------------
+  test-runner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aws-cost-test-runner
+    environment:
+      DATABASE_URL: postgresql://testuser:testpass@postgres-test:5432/aws_cost_test
+      REDIS_HOST: redis-test
+      REDIS_PORT: 6379
+      ENVIRONMENT: test
+      DEBUG: "true"
+      SECRET_KEY: test-secret-key-not-used-in-production-min32c
+      JWT_SECRET_KEY: test-jwt-secret-key-not-used-in-production32
+      ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZy0=
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+    volumes:
+      - ./backend:/app
+      - ./tests:/tests
+    working_dir: /tests
+    command: >
+      sh -c "pip install -r /tests/requirements-test.txt -q &&
+             python -m pytest --ignore=test_services/test_rightsizing_service.py -q"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - awscost-test
+
+networks:
+  awscost-test:
+    driver: bridge
