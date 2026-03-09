@@ -180,7 +180,7 @@ export function Automation() {
           <div className="p-12">
             <LoadingSpinner size="lg" text="Loading jobs..." />
           </div>
-        ) : !jobsData || jobsData.jobs.length === 0 ? (
+        ) : !jobsData || !jobsData.jobs || !Array.isArray(jobsData.jobs) || jobsData.jobs.length === 0 ? (
           <div className="p-12 text-center">
             <Calendar className="w-16 h-16 text-modernGray-300 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-modernGray-700 mb-2">No Scheduled Jobs</h3>

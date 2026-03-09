@@ -109,7 +109,7 @@ export function RightSizing() {
   const getFilteredAndSortedRecommendations = () => {
     if (!recommendations) return []
 
-    let filtered = recommendations.recommendations
+    let filtered = Array.isArray(recommendations.recommendations) ? recommendations.recommendations : []
 
     // Apply resource type filter
     if (resourceTypeFilter) {

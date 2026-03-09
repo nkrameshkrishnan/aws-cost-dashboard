@@ -35,7 +35,7 @@ export function BudgetManagement() {
     retry: 1
   })
 
-  const hasAccounts = accounts && accounts.length > 0
+  const hasAccounts = accounts && Array.isArray(accounts) && accounts.length > 0
 
   // Fetch budgets
   const { data: budgets, isLoading } = useQuery({
@@ -47,13 +47,13 @@ export function BudgetManagement() {
   const { data: budgetStatuses } = useQuery({
     queryKey: ['budgetStatuses', budgets],
     queryFn: async () => {
-      if (!budgets || budgets.length === 0) return []
+      if (!budgets || !Array.isArray(budgets) || budgets.length === 0) return []
       const statuses = await Promise.all(
         budgets.map(b => budgetsApi.status(b.id))
       )
       return statuses
     },
-    enabled: !!budgets && budgets.length > 0
+    enabled: !!budgets && Array.isArray(budgets) && budgets.length > 0
   })
 
   // Fetch summary
@@ -303,7 +303,7 @@ export function BudgetManagement() {
                 className="input max-w-xs"
               >
                 <option value="">Select AWS Account</option>
-                {accounts?.map((account) => (
+                {Array.isArray(accounts) && accounts.map((account) => (
                   <option key={account.id} value={account.name}>
                     {account.name}
                   </option>
@@ -383,7 +383,7 @@ export function BudgetManagement() {
                   onChange={(e) => setFormData({ ...formData, aws_account_id: parseInt(e.target.value) })}
                 >
                   <option value={0}>Select an account</option>
-                  {accounts?.map((account) => (
+                  {Array.isArray(accounts) && accounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -516,7 +516,7 @@ export function BudgetManagement() {
         <div className="py-8">
           <LoadingSpinner size="lg" text="Loading budgets..." />
         </div>
-      ) : budgetStatuses && budgetStatuses.length > 0 ? (
+      ) : budgetStatuses && Array.isArray(budgetStatuses) && budgetStatuses.length > 0 ? (
         <div className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Your Budgets</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

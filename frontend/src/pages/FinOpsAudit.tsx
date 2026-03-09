@@ -3949,7 +3949,7 @@ export function FinOpsAudit() {
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Send Audit Report to Teams</h2>
 
-            {webhooks && webhooks.length > 0 ? (
+            {webhooks && Array.isArray(webhooks) && webhooks.length > 0 ? (
               <>
                 <p className="text-sm text-gray-600 mb-4">
                   Select a Teams webhook to send the audit findings, or send to all active webhooks configured for audit reports:

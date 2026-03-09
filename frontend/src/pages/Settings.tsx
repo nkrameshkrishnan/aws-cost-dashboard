@@ -95,7 +95,7 @@ export default function Settings() {
           <div className="py-8">
             <LoadingSpinner size="md" text="Loading webhooks..." />
           </div>
-        ) : webhooks && webhooks.length > 0 ? (
+        ) : webhooks && Array.isArray(webhooks) && webhooks.length > 0 ? (
           <div className="space-y-4">
             {webhooks.map((webhook) => (
               <div

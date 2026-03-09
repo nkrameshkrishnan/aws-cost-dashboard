@@ -194,7 +194,7 @@ export function AWSAccountsPage() {
       {/* Accounts List */}
       {isLoading ? (
         <SkeletonList count={3} />
-      ) : accounts && accounts.length > 0 ? (
+      ) : accounts && Array.isArray(accounts) && accounts.length > 0 ? (
         <div className="grid gap-4">
           {accounts.map((account: AWSAccount) => (
             <div key={account.id} className="card">
