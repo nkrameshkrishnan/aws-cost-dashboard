@@ -1,0 +1,81 @@
+# =============================================================================
+# Ingress — local / minikube (HTTP only, no TLS, no host restriction)
+# =============================================================================
+#
+# Prerequisites (handled by minikube-deploy.sh):
+#   minikube addons enable ingress
+#
+# Access after deployment:
+#   Option A (port-forward — simplest):
+#     kubectl port-forward -n aws-cost-dashboard svc/backend 8000:80
+#     → http://localhost:8000
+#
+#   Option B (minikube ingress):
+#     MINIKUBE_IP=$(minikube ip)
+#     curl http://$MINIKUBE_IP/health
+#
+#   Swagger UI (because ENABLE_DOCS=true in local ConfigMap):
+#     http://localhost:8000/docs
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/env: local
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+
+    # No TLS redirect in local
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+    # CORS — allow local Vite dev server
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:5173,http://localhost:3000"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, Accept"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Generous timeouts for slow AWS API calls during development
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+
+spec:
+  # No TLS block — HTTP only for local dev
+  rules:
+    - http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http

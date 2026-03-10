@@ -1,0 +1,29 @@
+# =============================================================================
+# Strategic-merge patch for backend-config ConfigMap — local overrides
+# Only the keys listed here are changed; all other keys from the base are kept.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: aws-cost-dashboard
+data:
+  # Environment
+  ENVIRONMENT: "local"
+  DEBUG: "true"
+  LOG_LEVEL: "DEBUG"
+
+  # CORS — allow local Vite dev server and the minikube-forwarded port
+  CORS_ORIGINS_STR: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+
+  # Expose Swagger UI for easier local testing
+  ENABLE_DOCS: "true"
+  ENABLE_TEST_ENDPOINTS: "true"
+
+  # Fewer workers — saves memory on a dev laptop
+  WORKERS: "2"
+
+  # Redis — points to the in-cluster Redis StatefulSet service
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"

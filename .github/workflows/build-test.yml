@@ -1,0 +1,172 @@
+# =============================================================================
+# build-test.yml — Build backend image and push to Docker Hub
+# =============================================================================
+#
+# Triggered on:
+#   - Push to `develop` or `test` branches
+#   - Any pull request targeting `develop`
+#   - Manual dispatch (workflow_dispatch)
+#
+# What it does:
+#   1. Runs the Python test suite (unit + schema tests, no AWS/integration)
+#   2. Builds the backend Docker image
+#   3. Pushes two tags to Docker Hub:
+#        <username>/aws-cost-dashboard-backend:<git-sha>   ← immutable, pinnable
+#        <username>/aws-cost-dashboard-backend:test-latest ← floating, for quick pulls
+#
+# Required GitHub secrets:
+#   DOCKERHUB_USERNAME   your Docker Hub username
+#   DOCKERHUB_TOKEN      Docker Hub access token (Settings → Security → New Token)
+#
+# After this workflow completes, pull the image locally and deploy with:
+#   TAG=<git-sha> ./scripts/minikube-deploy.sh --skip-build
+# =============================================================================
+
+name: Build & Push (Docker Hub — Test)
+
+on:
+  push:
+    branches:
+      - develop
+      - test
+    paths:
+      - "backend/**"
+      - ".github/workflows/build-test.yml"
+
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "backend/**"
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag override (default: git short SHA)"
+        required: false
+        default: ""
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Unit tests (fast feedback, no AWS/DB dependencies)
+  # ---------------------------------------------------------------------------
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/requirements-test.txt
+
+      - name: Run unit + schema tests (no AWS, no DB)
+        working-directory: tests
+        run: |
+          python -m pytest -m "unit or schema" \
+            --tb=short \
+            -q \
+            --no-header
+        env:
+          # Minimal env so FastAPI config doesn't fail to load
+          SECRET_KEY: "test-secret-key-at-least-32-characters-long"
+          JWT_SECRET_KEY: "test-jwt-secret-key-at-least-32-chars-xx"
+          ENCRYPTION_KEY: "dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw=="
+          DATABASE_URL: "sqlite:///:memory:"
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — Docker build and push to Docker Hub
+  # ---------------------------------------------------------------------------
+  build-push:
+    name: Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+    needs: test
+    # On PRs only build (don't push) — push only on branch commits
+    if: github.event_name != 'pull_request'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha_tag }}
+      image_full: ${{ steps.meta.outputs.full_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image metadata
+        id: meta
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          OVERRIDE="${{ github.event.inputs.tag }}"
+          TAG="${OVERRIDE:-$SHA}"
+          REPO="${{ secrets.DOCKERHUB_USERNAME }}/aws-cost-dashboard-backend"
+
+          echo "sha_tag=$TAG"               >> "$GITHUB_OUTPUT"
+          echo "full_image=$REPO:$TAG"      >> "$GITHUB_OUTPUT"
+          echo "repo=$REPO"                 >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          # Layer cache from the previous build for faster CI runs
+          cache-from: type=registry,ref=${{ steps.meta.outputs.repo }}:buildcache
+          cache-to:   type=registry,ref=${{ steps.meta.outputs.repo }}:buildcache,mode=max
+          tags: |
+            ${{ steps.meta.outputs.full_image }}
+            ${{ steps.meta.outputs.repo }}:test-latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Print deploy instructions
+        run: |
+          echo ""
+          echo "✅ Image pushed: ${{ steps.meta.outputs.full_image }}"
+          echo ""
+          echo "To deploy locally with minikube:"
+          echo "  export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}"
+          echo "  export DOCKERHUB_TOKEN=<your-token>"
+          echo "  TAG=${{ steps.meta.outputs.sha_tag }} ./scripts/minikube-deploy.sh --skip-build"
+          echo ""
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — PR: build only (verify Dockerfile is valid, no push)
+  # ---------------------------------------------------------------------------
+  build-only:
+    name: Build Only (PR check)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: aws-cost-dashboard-backend:pr-${{ github.event.number }}

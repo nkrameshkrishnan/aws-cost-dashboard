@@ -1,0 +1,64 @@
+# =============================================================================
+# Kustomize overlay — local / minikube testing environment
+# =============================================================================
+#
+# Differences from production:
+#   - Single replica (minikube is a single-node cluster)
+#   - Docker Hub image instead of ECR
+#   - DEBUG=true, ENABLE_DOCS=true, localhost CORS origins
+#   - HTTP-only ingress (no cert-manager / Let's Encrypt)
+#   - No HPA (auto-scaling is not useful on a single-node dev cluster)
+#   - No NetworkPolicies (minikube's default CNI doesn't enforce them)
+#   - In-cluster Postgres + Redis (no RDS / ElastiCache)
+#   - AWS credentials injected via Secret (no IRSA)
+#
+# Usage:
+#   ./scripts/minikube-deploy.sh        # recommended — handles everything
+#   kubectl apply -k kubernetes/overlays/local   # manual apply (secrets must exist)
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aws-cost-dashboard
+
+# ---------------------------------------------------------------------------
+# Resources — subset of production (no HPA, no cert-issuer, no net-policies)
+# ---------------------------------------------------------------------------
+resources:
+  - ../../base/namespace.yaml
+  - ../../base/rbac.yaml
+  - ../../base/configmap.yaml
+  - ../../postgres/statefulset.yaml
+  - ../../postgres/service.yaml
+  - ../../redis/statefulset.yaml
+  - ../../redis/service.yaml
+  - ../../backend/deployment.yaml
+  - ../../backend/service.yaml
+  - ingress-local.yaml
+
+# ---------------------------------------------------------------------------
+# Image replacement
+# The deploy script updates `newName` and `newTag` via sed before applying.
+# name must match the placeholder used in the base deployment.yaml exactly.
+# ---------------------------------------------------------------------------
+images:
+  - name: REPLACE_WITH_ECR_IMAGE
+    newName: DOCKERHUB_USERNAME/aws-cost-dashboard-backend   # ← script replaces this
+    newTag: latest                                            # ← script replaces this
+
+# ---------------------------------------------------------------------------
+# Patches
+# ---------------------------------------------------------------------------
+patches:
+  # Deployment: 1 replica, lighter resources, no topology spread constraints
+  - path: backend-patch.yaml
+    target:
+      kind: Deployment
+      name: backend
+
+  # ConfigMap: local overrides (debug, CORS, docs)
+  - path: configmap-patch.yaml
+    target:
+      kind: ConfigMap
+      name: backend-config

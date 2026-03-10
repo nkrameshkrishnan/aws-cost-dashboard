@@ -1,0 +1,40 @@
+# =============================================================================
+# Strategic-merge patch for the backend Deployment — local/minikube overrides
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: aws-cost-dashboard
+spec:
+  # Single replica — minikube is a single-node cluster; 2 replicas + the
+  # DoNotSchedule topology spread constraint would leave one pod Pending.
+  replicas: 1
+
+  template:
+    spec:
+      initContainers:
+        - name: migrate
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+      containers:
+        - name: backend
+          # Lower resource limits — friendlier for a dev laptop
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+      # Topology spread constraints require multiple nodes to schedule.
+      # Setting to [] removes all constraints so the pod schedules on the
+      # single minikube node without any topology restrictions.
+      topologySpreadConstraints: []
