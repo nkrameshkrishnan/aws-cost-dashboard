@@ -1,0 +1,127 @@
+# =============================================================================
+# PostgreSQL StatefulSet
+#
+# For production on AWS, prefer AWS RDS (managed, automated backups, Multi-AZ).
+# This StatefulSet is provided for:
+#   - Self-hosted Kubernetes clusters (on-prem, GKE, AKS, etc.)
+#   - Local/staging environments that don't use RDS
+#
+# When using RDS: delete this file and set DATABASE_URL in secret.yaml to
+# point at the RDS endpoint. The postgres Service (service.yaml) is also
+# not needed in that case.
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: postgres        # headless service for stable DNS (postgres-0.postgres)
+  replicas: 1                  # single primary; use operator (CloudNativePG) for HA
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aws-cost-dashboard
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aws-cost-dashboard
+        app.kubernetes.io/component: postgres
+    spec:
+      serviceAccountName: postgres-sa
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999       # postgres user UID in the official image
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+
+          env:
+            - name: POSTGRES_DB
+              value: aws_cost_dashboard
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            # Store data on the PVC (not the default /var/lib/postgresql/data
+            # which can have permission issues with fsGroup).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "aws_cost_dashboard"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "aws_cost_dashboard"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # postgres writes WAL to its data dir
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "SETGID", "SETUID"]
+
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 60
+
+  # ---------------------------------------------------------------------------
+  # PersistentVolumeClaim template — 20 Gi per replica
+  # StorageClass: use your cluster's default, or set explicitly (e.g. "gp3" on EKS)
+  # ---------------------------------------------------------------------------
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+        labels:
+          app.kubernetes.io/name: aws-cost-dashboard
+          app.kubernetes.io/component: postgres
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ""    # set to your StorageClass, or "" for cluster default
+        resources:
+          requests:
+            storage: 20Gi

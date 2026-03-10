@@ -1,0 +1,205 @@
+name: Security
+
+# Run on pull requests, weekly on main, and on manual dispatch.
+# Results appear in the GitHub Security tab (SARIF upload) and as PR comments.
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday at 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write    # needed to upload SARIF to the Security tab
+  pull-requests: write      # needed to post PR comments
+
+jobs:
+  # ===========================================================================
+  # Python — Bandit static security analysis
+  # ===========================================================================
+  bandit:
+    name: Bandit (Python SAST)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Bandit
+        run: |
+          pip install bandit[sarif] --quiet
+          bandit -r backend/app \
+            --severity-level medium \
+            --confidence-level medium \
+            --format sarif \
+            --output bandit-results.sarif \
+            || true   # don't fail the step; SARIF upload provides the gate
+
+      - name: Upload Bandit SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit
+
+  # ===========================================================================
+  # Python — pip-audit dependency vulnerability check
+  # ===========================================================================
+  pip-audit:
+    name: pip-audit (Python deps)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Audit backend dependencies
+        run: |
+          pip install pip-audit --quiet
+          pip-audit -r backend/requirements.txt \
+            --format json \
+            --output pip-audit-results.json \
+            || true
+
+      - name: Print audit results
+        if: always()
+        run: |
+          if [ -f pip-audit-results.json ]; then
+            python3 -c "
+          import json, sys
+          data = json.load(open('pip-audit-results.json'))
+          vulns = data.get('vulnerabilities', [])
+          if vulns:
+              print(f'Found {len(vulns)} vulnerable package(s):')
+              for v in vulns:
+                  print(f'  {v[\"name\"]}=={v[\"version\"]}: {[a[\"id\"] for a in v[\"aliases\"]]}')
+              sys.exit(1)
+          else:
+              print('No vulnerabilities found.')
+          "
+          fi
+
+  # ===========================================================================
+  # JavaScript — npm audit dependency vulnerability check
+  # ===========================================================================
+  npm-audit:
+    name: npm audit (JS deps)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        # Fails on high/critical vulnerabilities; moderate are reported only.
+
+  # ===========================================================================
+  # Docker — Trivy image vulnerability scan
+  # Scans the image already on Docker Hub (uses the latest tag).
+  # ===========================================================================
+  trivy:
+    name: Trivy (Docker image scan)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy against the Docker Hub image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: rameshnkkrishnan/aws_cost_explorer_backend:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          # Ignore unfixed CVEs — only actionable findings matter
+          ignore-unfixed: true
+          exit-code: "0"    # upload results without failing; review in Security tab
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      # Also run Trivy against the repo itself (IaC / secrets scan)
+      - name: Trivy repo scan (IaC + secrets)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-repo-results.sarif
+          severity: CRITICAL,HIGH
+          scanners: misconfig,secret
+          exit-code: "1"    # fail the job if secrets are found in the repo
+
+      - name: Upload repo scan SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-repo-results.sarif
+          category: trivy-repo
+
+  # ===========================================================================
+  # CodeQL — GitHub's built-in semantic code analysis
+  # ===========================================================================
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    # CodeQL is resource-intensive; skip on draft PRs.
+    if: github.event.pull_request.draft == false
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-${{ matrix.language }}

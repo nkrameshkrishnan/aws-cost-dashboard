@@ -1,0 +1,108 @@
+# =============================================================================
+# Ingress — routes external HTTPS traffic to the backend API
+#
+# Frontend (GitHub Pages) is at:
+#   https://nkrameshkrishnan.github.io/aws-cost-dashboard/
+#
+# The Ingress only exposes the backend API. All /api/* and /health paths
+# route to the backend Service. No frontend container is involved.
+#
+# Prerequisites:
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+#
+# TLS (cert-manager):
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+#
+# Update `host` below to match your cluster's public hostname or IP.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: ingress
+  annotations:
+    # ---- Ingress class -------------------------------------------------------
+    kubernetes.io/ingress.class: "nginx"
+
+    # ---- TLS / HTTPS ---------------------------------------------------------
+    # cert-manager will issue a Let's Encrypt certificate automatically.
+    # Remove these two lines if you manage TLS outside the cluster.
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # ---- CORS ----------------------------------------------------------------
+    # The GitHub Pages frontend makes cross-origin requests to this Ingress.
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://nkrameshkrishnan.github.io"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, Accept, X-Requested-With"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-max-age: "86400"
+
+    # ---- Proxy / timeouts ----------------------------------------------------
+    # AWS Cost Explorer calls can be slow — give them enough time.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+    # ---- Rate limiting -------------------------------------------------------
+    # Protect the Cost Explorer endpoints from accidental hammering.
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+
+    # ---- Security headers ----------------------------------------------------
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: geolocation=(), microphone=()";
+
+spec:
+  # TLS — replace `api.your-domain.com` with your actual hostname
+  tls:
+    - hosts:
+        - api.your-domain.com   # ← UPDATE THIS
+      secretName: backend-tls   # cert-manager will create this Secret
+
+  rules:
+    - host: api.your-domain.com   # ← UPDATE THIS
+      http:
+        paths:
+          # Health check (used by load balancers and monitoring)
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          # API v1 — all application routes
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          # OpenAPI / Swagger docs (only if ENABLE_DOCS=true in ConfigMap)
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http

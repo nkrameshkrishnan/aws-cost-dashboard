@@ -6,8 +6,14 @@
 #
 # Architecture note:
 #   The frontend is hosted on GitHub Pages (static, free).
-#   Only the backend (FastAPI) runs on ECS Fargate.
-#   API Gateway acts as the public HTTPS entry point.
+#   The backend (FastAPI) runs on EKS (Kubernetes).
+#   Terraform provisions the persistent infrastructure layer:
+#     VPC · RDS · ElastiCache · Secrets Manager · ECR · CloudWatch
+#   The EKS cluster itself is created by eksctl (scripts/eks-cluster.yaml).
+#
+# Workflow:
+#   1. terraform apply         → creates VPC, RDS, Redis, ECR, etc.
+#   2. ./scripts/eks-deploy.sh → creates EKS cluster + deploys application
 # ============================================================================
 
 # AWS region
@@ -21,6 +27,16 @@ project_name = "awscost"
 
 # VPC CIDR block
 vpc_cidr = "10.0.0.0/16"
+
+# ============================================================================
+# ECR — Container Registry
+# ============================================================================
+#
+# After `terraform apply`, the ecr_repository_url output gives you the full
+# ECR URI to set as ECR_REPOSITORY in your GitHub Actions secrets.
+# ============================================================================
+
+ecr_repository_name = "aws-cost-dashboard-backend"
 
 # ============================================================================
 # Database (RDS PostgreSQL)
@@ -51,52 +67,6 @@ jwt_secret_key = "REPLACE_WITH_64_CHAR_HEX_STRING"
 
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 encryption_key = "REPLACE_WITH_44_CHAR_FERNET_KEY="
-
-# ============================================================================
-# ECS Fargate — Backend only
-# (The frontend Docker image exists but is served from GitHub Pages, not ECS)
-# ============================================================================
-
-# Backend image in your registry
-backend_image = "ghcr.io/your-org/aws-cost-dashboard-backend:latest"
-# AWS ECR example:
-# backend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/awscost-backend:latest"
-
-backend_task_cpu    = 1024  # 1 vCPU
-backend_task_memory = 2048  # 2 GB
-
-ecs_desired_count = 2
-ecs_min_capacity  = 2
-ecs_max_capacity  = 10
-
-# ============================================================================
-# API Gateway + CORS
-# ============================================================================
-#
-# IMPORTANT: The GitHub Pages URL MUST be listed here so the browser doesn't
-# block cross-origin requests to the API.
-#
-# After `terraform apply`, the api_gateway_url output gives you the URL to set
-# as VITE_API_BASE_URL in .env.production before building the frontend.
-# ============================================================================
-
-cors_allowed_origins = [
-  "https://YOUR-GITHUB-USERNAME.github.io",  # ← replace with your GitHub username
-  "http://localhost:5173",                    # local Vite dev server
-  "http://localhost:3000",                    # alternative local dev
-]
-
-# Optional: custom domain for the API Gateway (e.g. api.example.com)
-# Requires a valid ACM certificate in the same region.
-custom_domain_name = ""
-# custom_domain_name = "api.your-domain.com"
-
-# ============================================================================
-# Optional: TLS certificate for the internal ALB
-# ============================================================================
-
-certificate_arn = ""
-# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc123..."
 
 # ============================================================================
 # Optional: S3 bucket for report uploads

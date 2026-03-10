@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+  annotations:
+    description: "ClusterIP service — exposes the FastAPI backend to the Ingress controller"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http      # named port on the pod (containerPort: 8000)
+      protocol: TCP

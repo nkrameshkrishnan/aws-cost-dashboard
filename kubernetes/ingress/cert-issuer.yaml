@@ -1,0 +1,48 @@
+# =============================================================================
+# cert-manager ClusterIssuer — automatically provision Let's Encrypt TLS certs
+#
+# Apply after installing cert-manager:
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+#   kubectl wait --namespace cert-manager --for=condition=ready pod --all --timeout=120s
+#
+# Then apply this file, and the Ingress will automatically get a certificate.
+# =============================================================================
+
+# Staging issuer — use first to avoid Let's Encrypt rate limits while testing
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: ingress
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: nkrameshkrishnan@gmail.com   # ← your email for expiry notices
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Production issuer — switch to this once staging cert works
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: ingress
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: nkrameshkrishnan@gmail.com   # ← your email for expiry notices
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx

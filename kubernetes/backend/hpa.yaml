@@ -1,0 +1,51 @@
+# =============================================================================
+# HorizontalPodAutoscaler — scales the backend based on CPU and memory
+#
+# Scale range  : 2–10 replicas
+# CPU target   : 70 %  — scale out before latency degrades
+# Memory target: 80 %  — scale out before OOM kills
+#
+# Requires metrics-server installed in the cluster:
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60     # wait 60 s before scaling up again
+      policies:
+        - type: Pods
+          value: 2                        # add at most 2 pods per scale event
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300    # wait 5 min before scaling down (avoids flapping)
+      policies:
+        - type: Pods
+          value: 1                        # remove at most 1 pod per scale event
+          periodSeconds: 120

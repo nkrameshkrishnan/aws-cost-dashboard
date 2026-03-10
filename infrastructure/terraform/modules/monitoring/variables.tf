@@ -13,18 +13,6 @@ variable "log_retention_days" {
   default     = 30
 }
 
-variable "secret_arns" {
-  description = "List of Secrets Manager secret ARNs to grant access to"
-  type        = list(string)
-  default     = []
-}
-
-variable "s3_bucket_arn" {
-  description = "ARN of S3 bucket for report uploads (optional)"
-  type        = string
-  default     = ""
-}
-
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

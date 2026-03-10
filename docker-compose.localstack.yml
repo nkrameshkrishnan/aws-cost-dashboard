@@ -1,0 +1,102 @@
+# =============================================================================
+# docker-compose.localstack.yml — LocalStack dev/test environment
+# =============================================================================
+#
+# Extends docker-compose.yml with a LocalStack container that emulates AWS
+# services locally (API Gateway, S3, Secrets Manager, SQS, etc.).
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.localstack.yml up --build
+#
+# After services are up, run the setup script to provision AWS resources:
+#   ./scripts/localstack-setup.sh
+#
+# LocalStack endpoint:  http://localhost.localstack.cloud:4566
+#                       (or http://localhost:4566 from the host)
+#
+# LocalStack UI:        http://localhost:4566/_localstack/health
+#                       http://localhost:4566/_localstack/swagger
+#
+# Architecture (local):
+#   Browser / Vite dev server (port 5173)
+#       │  HTTPS API calls → http://localhost:4566/restapis/<id>/local/_user_request_/
+#       ▼
+#   LocalStack API Gateway (port 4566)          ← emulates AWS API Gateway
+#       │  HTTP_PROXY integration
+#       ▼
+#   Backend FastAPI container (port 8000)        ← same as regular dev stack
+#       │
+#       ├── Postgres (port 5432)
+#       └── Redis   (port 6379)
+#
+# Set VITE_API_BASE_URL to the LocalStack API Gateway invoke URL printed by
+# localstack-setup.sh to test the full API Gateway → Backend path locally.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # LocalStack — emulates AWS services locally
+  # ---------------------------------------------------------------------------
+  localstack:
+    image: localstack/localstack:3
+    container_name: localstack
+    restart: unless-stopped
+    ports:
+      - "4566:4566"          # LocalStack gateway (all services)
+      - "4510-4559:4510-4559" # External service port range
+    environment:
+      # Services to enable (add more as needed)
+      SERVICES: apigateway,apigatewayv2,s3,secretsmanager,ssm,iam,sts,logs,sqs
+
+      # Debug level: 0=error, 1=info, 2=debug, 3=trace
+      DEBUG: ${LOCALSTACK_DEBUG:-0}
+
+      # Persist state between restarts (uses Docker volume)
+      PERSISTENCE: ${LOCALSTACK_PERSISTENCE:-1}
+
+      # Allow all AWS regions (mirrors production us-east-1 by default)
+      DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+
+      # Edge port (gateway port for all services)
+      EDGE_PORT: 4566
+
+      # Host exposed to services inside LocalStack for callbacks/webhooks
+      LOCALSTACK_HOST: localstack
+
+      # Docker host — needed for Lambda execution (optional)
+      DOCKER_HOST: unix:///var/run/docker.sock
+
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock   # for Lambda (optional)
+    networks:
+      - cost-dashboard-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Override backend to add LocalStack env vars so the app can reach it
+  # ---------------------------------------------------------------------------
+  backend:
+    environment:
+      # Point AWS SDK calls to LocalStack instead of real AWS
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+
+      # Override export bucket to use LocalStack S3
+      EXPORT_S3_BUCKET: ${EXPORT_S3_BUCKET:-aws-cost-dashboard-exports}
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+volumes:
+  # Persist LocalStack state between restarts so you don't lose provisioned
+  # resources on every `docker-compose down` (but not `down -v`)
+  localstack-data:
+    name: aws-cost-dashboard-localstack-data

@@ -1,0 +1,51 @@
+# =============================================================================
+# PostgreSQL Services
+#
+# Two services:
+#  1. Headless (clusterIP: None) — gives pods stable DNS  postgres-0.postgres
+#  2. ClusterIP "postgres"       — stable service DNS for the backend
+#
+# The backend uses DATABASE_URL=postgresql://postgres:pass@postgres:5432/...
+# which resolves to this ClusterIP service.
+# =============================================================================
+
+# Headless service required by the StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+
+---
+# ClusterIP service — used by the backend (DATABASE_URL host = "postgres")
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

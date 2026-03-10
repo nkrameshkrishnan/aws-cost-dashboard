@@ -7,24 +7,29 @@
 #  GitHub Pages (frontend)
 #       │  HTTPS API calls
 #       ▼
-#  API Gateway HTTP API  ←  CORS allows GitHub Pages origin
-#       │  VPC Link
-#       ▼
-#  Internal ALB  (private subnets)
+#  nginx Ingress (NLB + sslip.io TLS)   ← CORS allows GitHub Pages origin
 #       │
 #       ▼
-#  ECS Fargate — Backend (FastAPI, port 8000)
+#  EKS — Backend Deployment (FastAPI, HPA 2-10 pods)
 #       │
-#       ├── RDS PostgreSQL
-#       ├── ElastiCache Redis
-#       └── AWS APIs (Cost Explorer, Budgets, EC2, RDS, Lambda …)
+#       ├── RDS PostgreSQL  (this module — private subnet)
+#       ├── ElastiCache Redis  (this module — private subnet)
+#       └── AWS APIs via IRSA  (Cost Explorer, Budgets, EC2, RDS …)
+#
+# Division of responsibility
 # ───────────────────────────────────────────────────────────────────────────
+#  Terraform  → VPC · RDS · ElastiCache · Secrets Manager · ECR · CloudWatch
+#  eksctl     → EKS cluster · node groups · OIDC / IRSA service account
+#  kubectl    → Application manifests (kubernetes/ directory)
 #
 # Usage:
 #   1. Copy terraform.tfvars.example → terraform.tfvars and fill in values
 #   2. terraform init
-#   3. terraform plan
-#   4. terraform apply
+#   3. terraform plan -out=tfplan
+#   4. terraform apply tfplan
+#   5. After apply, note the outputs and update kubernetes/base/configmap.yaml
+#      with the RDS endpoint and Redis endpoint, then run:
+#      ./scripts/eks-deploy.sh
 # ==============================================================================
 
 terraform {
@@ -94,7 +99,20 @@ module "security" {
 
   name_prefix = local.name_prefix
   vpc_id      = module.networking.vpc_id
+  vpc_cidr    = var.vpc_cidr
   tags        = local.common_tags
+}
+
+# ==============================================================================
+# ECR — Container Registry for backend images
+# ==============================================================================
+
+module "ecr" {
+  source = "./modules/ecr"
+
+  name_prefix     = local.name_prefix
+  repository_name = var.ecr_repository_name
+  tags            = local.common_tags
 }
 
 # ==============================================================================
@@ -164,7 +182,7 @@ module "secrets" {
 }
 
 # ==============================================================================
-# CloudWatch Logs + IAM Roles
+# CloudWatch Logs
 # ==============================================================================
 
 module "monitoring" {
@@ -172,161 +190,55 @@ module "monitoring" {
 
   name_prefix        = local.name_prefix
   log_retention_days = 30
-  secret_arns = [
-    module.secrets.db_credentials_secret_arn,
-    module.secrets.app_secrets_arn
-  ]
-  s3_bucket_arn = var.s3_bucket_arn
-  tags          = local.common_tags
-
-  depends_on = [module.secrets]
-}
-
-# ==============================================================================
-# Internal Application Load Balancer (backend only)
-# ==============================================================================
-
-module "alb" {
-  source = "./modules/alb"
-
-  name_prefix                = local.name_prefix
-  vpc_id                     = module.networking.vpc_id
-  internal                   = true  # Private ALB — accessed only via API Gateway VPC Link
-  private_subnet_ids         = module.networking.private_subnet_ids
-  public_subnet_ids          = module.networking.public_subnet_ids
-  alb_security_group_id      = module.security.alb_security_group_id
-  certificate_arn            = var.certificate_arn
-  enable_deletion_protection = var.environment == "production"
-  tags                       = local.common_tags
-
-  depends_on = [module.networking, module.security]
-}
-
-# ==============================================================================
-# ECS Fargate — Backend only
-# (Frontend is served from GitHub Pages)
-# ==============================================================================
-
-module "ecs" {
-  source = "./modules/ecs"
-
-  name_prefix              = local.name_prefix
-  environment              = var.environment
-  aws_region               = var.aws_region
-  private_subnet_ids       = module.networking.private_subnet_ids
-  ecs_security_group_id    = module.security.ecs_tasks_security_group_id
-  task_execution_role_arn  = module.monitoring.ecs_task_execution_role_arn
-  task_role_arn            = module.monitoring.ecs_task_role_arn
-  backend_target_group_arn = module.alb.backend_target_group_arn
-  backend_image            = var.backend_image
-  backend_task_cpu         = var.backend_task_cpu
-  backend_task_memory      = var.backend_task_memory
-  desired_count            = var.ecs_desired_count
-  min_capacity             = var.ecs_min_capacity
-  max_capacity             = var.ecs_max_capacity
-  db_username              = var.db_username
-  db_password              = var.db_password
-  db_endpoint              = module.database.address
-  db_port                  = module.database.port
-  db_name                  = var.db_name
-  redis_endpoint           = module.cache.primary_endpoint_address
-  redis_port               = module.cache.port
-  app_secrets_arn          = module.secrets.app_secrets_arn
-  backend_log_group_name   = module.monitoring.backend_log_group_name
-  cors_allowed_origins     = var.cors_allowed_origins
-  tags                     = local.common_tags
-
-  depends_on = [
-    module.networking,
-    module.security,
-    module.database,
-    module.cache,
-    module.secrets,
-    module.monitoring,
-    module.alb
-  ]
-}
-
-# ==============================================================================
-# VPC Link (connects API Gateway to the private ALB)
-# ==============================================================================
-
-module "vpc_link" {
-  source = "./modules/vpc-link"
-
-  name_prefix        = local.name_prefix
-  subnet_ids         = module.networking.private_subnet_ids
-  security_group_ids = [module.security.vpc_link_security_group_id]
   tags               = local.common_tags
 
-  depends_on = [module.networking, module.security, module.alb]
-}
-
-# ==============================================================================
-# API Gateway HTTP API (public entry point for the GitHub Pages frontend)
-# ==============================================================================
-
-module "api_gateway" {
-  source = "./modules/api-gateway"
-
-  name_prefix          = local.name_prefix
-  vpc_link_id          = module.vpc_link.vpc_link_id
-  alb_listener_arn     = module.alb.http_listener_arn
-  cors_allowed_origins = var.cors_allowed_origins
-  custom_domain_name   = var.custom_domain_name
-  certificate_arn      = var.certificate_arn
-  tags                 = local.common_tags
-
-  depends_on = [module.vpc_link, module.alb]
+  depends_on = [module.secrets]
 }
 
 # ==============================================================================
 # Outputs
 # ==============================================================================
 
-output "api_gateway_url" {
-  description = "API Gateway invoke URL — set this as VITE_API_BASE_URL in .env.production before building"
-  value       = module.api_gateway.api_invoke_url
-}
-
-output "api_gateway_id" {
-  description = "ID of the API Gateway HTTP API"
-  value       = module.api_gateway.api_id
-}
-
-output "custom_domain_url" {
-  description = "Custom domain URL for the API (if configured)"
-  value       = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : ""
-}
-
-output "ecs_cluster_name" {
-  description = "ECS cluster name"
-  value       = module.ecs.cluster_name
-}
-
-output "backend_service_name" {
-  description = "ECS backend service name"
-  value       = module.ecs.backend_service_name
+output "ecr_repository_url" {
+  description = "ECR repository URL — set as ECR_REPOSITORY in GitHub Actions secrets"
+  value       = module.ecr.repository_url
 }
 
 output "rds_endpoint" {
-  description = "RDS database endpoint"
+  description = "RDS database endpoint — update kubernetes/base/configmap.yaml with this value"
   value       = module.database.endpoint
   sensitive   = true
 }
 
+output "rds_address" {
+  description = "RDS database hostname (without port)"
+  value       = module.database.address
+  sensitive   = true
+}
+
 output "redis_endpoint" {
-  description = "Redis cache endpoint"
+  description = "Redis cache endpoint — update kubernetes/base/configmap.yaml with this value"
   value       = module.cache.primary_endpoint_address
   sensitive   = true
 }
 
 output "vpc_id" {
-  description = "VPC ID"
+  description = "VPC ID — pass to eksctl if creating the EKS cluster in the same VPC"
   value       = module.networking.vpc_id
 }
 
 output "private_subnet_ids" {
-  description = "Private subnet IDs"
+  description = "Private subnet IDs — used for EKS node groups and RDS subnet group"
   value       = module.networking.private_subnet_ids
+}
+
+output "backend_log_group_name" {
+  description = "CloudWatch log group name for backend pods"
+  value       = module.monitoring.backend_log_group_name
+}
+
+output "db_credentials_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding DB credentials"
+  value       = module.secrets.db_credentials_secret_arn
+  sensitive   = true
 }

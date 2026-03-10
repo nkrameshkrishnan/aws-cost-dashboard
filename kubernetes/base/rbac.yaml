@@ -1,0 +1,89 @@
+# =============================================================================
+# RBAC — Least-privilege service accounts for each workload
+#
+# The backend SA has no K8s API permissions (it calls AWS APIs, not K8s).
+# Postgres and Redis SAs are intentionally empty — they need no K8s access.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Backend service account
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+  annotations:
+    # If running on EKS with IAM Roles for Service Accounts (IRSA), set the
+    # role ARN here instead of mounting AWS credentials as a Secret.
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/awscost-backend-role
+    description: "Service account for the FastAPI backend. No K8s API access needed."
+automountServiceAccountToken: false   # backend does not call the K8s API
+
+---
+# -----------------------------------------------------------------------------
+# PostgreSQL service account
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-sa
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: postgres
+automountServiceAccountToken: false
+
+---
+# -----------------------------------------------------------------------------
+# Redis service account
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-sa
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: redis
+automountServiceAccountToken: false
+
+---
+# -----------------------------------------------------------------------------
+# Role — backend may read its own ConfigMap and Secret (for runtime reloads)
+# This is optional; remove if the app reads config only at startup.
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-role
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["backend-config"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-rolebinding
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: backend
+subjects:
+  - kind: ServiceAccount
+    name: backend-sa
+    namespace: aws-cost-dashboard
+roleRef:
+  kind: Role
+  name: backend-role
+  apiGroup: rbac.authorization.k8s.io

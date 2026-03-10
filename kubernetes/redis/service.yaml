@@ -1,0 +1,40 @@
+# Headless service — required by the StatefulSet for stable pod DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: redis
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+
+---
+# ClusterIP service — used by the backend (REDIS_HOST="redis")
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: aws-cost-dashboard
+  labels:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aws-cost-dashboard
+    app.kubernetes.io/component: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
