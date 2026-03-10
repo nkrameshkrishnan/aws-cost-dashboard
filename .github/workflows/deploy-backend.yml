@@ -1,0 +1,167 @@
+name: Deploy Backend to EKS
+
+# Deploy the FastAPI backend to EKS whenever backend code changes on main,
+# or on manual dispatch.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID       — IAM user with ECR push + eks:UpdateKubeconfig + eks:DescribeCluster
+#   AWS_SECRET_ACCESS_KEY   — corresponding secret key
+#   AWS_REGION              — e.g. us-east-1
+#   ECR_REPOSITORY          — full ECR URI, e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/aws-cost-dashboard-backend
+#   EKS_CLUSTER_NAME        — e.g. aws-cost-dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "kubernetes/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Specific image tag to deploy (default: current commit SHA)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ===========================================================================
+  # Build backend image and push to ECR
+  # ===========================================================================
+  build:
+    name: Build & push to ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      ecr_image: ${{ steps.meta.outputs.ecr_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [[ -z "$TAG" ]]; then
+            TAG="${{ github.sha }}"
+          fi
+          SHORT_TAG="${TAG:0:7}"
+          ECR_IMAGE="${{ secrets.ECR_REPOSITORY }}:${SHORT_TAG}"
+          echo "image_tag=${SHORT_TAG}"  >> "$GITHUB_OUTPUT"
+          echo "ecr_image=${ECR_IMAGE}"  >> "$GITHUB_OUTPUT"
+          echo "Building image: ${ECR_IMAGE}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.ecr_image }}
+            ${{ secrets.ECR_REPOSITORY }}:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Deploy to EKS
+  # ===========================================================================
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name "${{ secrets.EKS_CLUSTER_NAME }}" \
+            --region "${{ secrets.AWS_REGION }}"
+
+      - name: Apply base manifests
+        run: |
+          kubectl apply -f kubernetes/base/namespace.yaml
+          kubectl apply -f kubernetes/base/rbac.yaml
+          kubectl apply -f kubernetes/base/configmap.yaml
+          kubectl apply -f kubernetes/base/network-policies.yaml
+
+      - name: Patch deployment with new image
+        run: |
+          ECR_IMAGE="${{ needs.build.outputs.ecr_image }}"
+          echo "Rolling out image: ${ECR_IMAGE}"
+          kubectl set image deployment/backend \
+            migrate="${ECR_IMAGE}" \
+            backend="${ECR_IMAGE}" \
+            -n aws-cost-dashboard
+          kubectl annotate deployment/backend -n aws-cost-dashboard \
+            deploy-commit="${{ github.sha }}" \
+            deploy-time="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --overwrite
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend \
+            -n aws-cost-dashboard \
+            --timeout=5m
+
+      - name: Health check
+        run: |
+          API_HOST=$(kubectl get ingress backend-ingress -n aws-cost-dashboard \
+            -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "")
+          if [[ -n "$API_HOST" ]]; then
+            echo "Checking https://${API_HOST}/health ..."
+            curl -sf --retry 5 --retry-delay 5 "https://${API_HOST}/health" \
+              && echo "Health check passed" \
+              || echo "Health check failed (TLS cert may still be provisioning)"
+          fi
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed - rolling back"
+          kubectl rollout undo deployment/backend -n aws-cost-dashboard
+          kubectl rollout status deployment/backend -n aws-cost-dashboard --timeout=3m
+
+      - name: Summary
+        run: |
+          echo "### Backend deployed to EKS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ needs.build.outputs.ecr_image }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cluster | \`${{ secrets.EKS_CLUSTER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY

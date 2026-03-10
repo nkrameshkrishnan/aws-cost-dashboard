@@ -1,0 +1,119 @@
+# =============================================================================
+# eksctl cluster configuration for AWS Cost Dashboard
+#
+# Creates a production-ready EKS cluster with:
+#   - Managed node group (on-demand t3.medium, 2–4 nodes)
+#   - IRSA (IAM Roles for Service Accounts) support
+#   - CloudWatch logging
+#   - AWS VPC CNI + CoreDNS + kube-proxy add-ons
+#
+# Usage:
+#   eksctl create cluster -f scripts/eks-cluster.yaml
+#
+# Estimated cost: ~$0.10/hr (EKS control plane) + ~$0.10/hr per t3.medium node
+# Cheapest option: use --nodes-min 1 --nodes-max 2 and reduce to 1 node initially
+# =============================================================================
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: aws-cost-dashboard
+  region: us-east-1          # ← change if you prefer a different region
+  version: "1.29"
+  tags:
+    project: aws-cost-dashboard
+    managed-by: eksctl
+
+# ---------------------------------------------------------------------------
+# IAM — enable IRSA so the backend pod can call AWS APIs without static keys
+# ---------------------------------------------------------------------------
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: backend-sa
+        namespace: aws-cost-dashboard
+        labels:
+          app.kubernetes.io/name: aws-cost-dashboard
+      attachPolicyARNs:
+        # Cost Explorer + Budgets read access
+        - arn:aws:iam::aws:policy/AWSBillingReadOnlyAccess
+      # Add Cost Explorer custom policy inline (Cost Explorer has no AWS managed policy)
+      attachPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ce:GetCostAndUsage
+              - ce:GetCostForecast
+              - ce:GetDimensionValues
+              - ce:GetReservationUtilization
+              - ce:GetRightsizingRecommendation
+              - ce:GetSavingsPlansUtilization
+              - ce:GetUsageForecast
+              - ec2:DescribeInstances
+              - ec2:DescribeRegions
+              - rds:DescribeDBInstances
+              - budgets:ViewBudget
+              - budgets:DescribeBudgets
+              - organizations:ListAccounts
+              - cloudwatch:GetMetricData
+              - cloudwatch:ListMetrics
+            Resource: "*"
+
+# ---------------------------------------------------------------------------
+# Managed node group — t3.medium is the sweet spot for this workload
+# ---------------------------------------------------------------------------
+managedNodeGroups:
+  - name: backend-ng
+    instanceType: t3.medium
+    minSize: 1
+    maxSize: 4
+    desiredCapacity: 2
+    volumeSize: 20
+    volumeType: gp3
+    amiFamily: AmazonLinux2
+    labels:
+      role: backend
+    tags:
+      project: aws-cost-dashboard
+      nodegroup: backend
+    iam:
+      withAddonPolicies:
+        # Required for cluster-autoscaler (scales nodes automatically)
+        autoScaler: true
+        # Required for nginx-ingress to create AWS NLB
+        albIngress: true
+        # CloudWatch logging from pods
+        cloudWatch: true
+    # Optional: use spot instances to reduce cost ~70% (less reliable)
+    # spot: true
+
+# ---------------------------------------------------------------------------
+# CloudWatch logging — captures control plane logs for debugging
+# ---------------------------------------------------------------------------
+cloudWatch:
+  clusterLogging:
+    enableTypes:
+      - api
+      - audit
+      - authenticator
+    logRetentionInDays: 7
+
+# ---------------------------------------------------------------------------
+# Add-ons — managed by AWS (auto-patched)
+# ---------------------------------------------------------------------------
+addons:
+  - name: vpc-cni
+    version: latest
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+  - name: coredns
+    version: latest
+  - name: kube-proxy
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: latest
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
