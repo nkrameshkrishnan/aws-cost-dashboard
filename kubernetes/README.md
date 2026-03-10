@@ -15,8 +15,8 @@ Backend   →  Kubernetes (this folder)
 Internet
    │
    ▼
-Ingress (nginx + TLS)          ← api.your-domain.com
-   │  CORS: nkrameshkrishnan.github.io
+Ingress (nginx + TLS)          ← <minikube-ip>.nip.io  (local)
+   │  CORS: nkrameshkrishnan.github.io                   <sslip.io-url>     (EKS)
    ▼
 backend Service (ClusterIP :80)
    ▼
@@ -32,8 +32,10 @@ StatefulSet StatefulSet
 (20 Gi PVC)  (5 Gi PVC)
 ```
 
-> **AWS clusters:** Replace the in-cluster postgres/redis with RDS + ElastiCache
+> **AWS/EKS:** Replace the in-cluster postgres/redis with RDS + ElastiCache,
 > and set `DATABASE_URL` / `REDIS_HOST` accordingly (see notes in each file).
+> The `eks-deploy.sh` script handles this automatically when you provide
+> RDS/Redis endpoints via environment variables.
 
 ---
 
@@ -57,9 +59,15 @@ kubernetes/
 ├── redis/
 │   ├── statefulset.yaml        Redis 7 StatefulSet with AOF persistence (5 Gi PVC)
 │   └── service.yaml            Headless + ClusterIP Services
-└── ingress/
-    ├── ingress.yaml            nginx Ingress with TLS + CORS for GitHub Pages
-    └── cert-issuer.yaml        cert-manager Let's Encrypt ClusterIssuers
+├── ingress/
+│   ├── ingress.yaml            nginx Ingress with TLS + CORS for GitHub Pages (EKS)
+│   └── cert-issuer.yaml        cert-manager Let's Encrypt ClusterIssuers
+└── overlays/
+    └── local/                  Kustomize overlay for minikube + Docker Hub testing
+        ├── kustomization.yaml
+        ├── backend-patch.yaml  1 replica, lower resources, no topology spread
+        ├── configmap-patch.yaml DEBUG=true, localhost CORS, ENABLE_DOCS=true
+        └── ingress-local.yaml  HTTP-only ingress for minikube
 ```
 
 ---
@@ -90,66 +98,67 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 ## First-time deploy
 
-### 1 — Fill in the Secret
+### Recommended: use the deploy scripts
 
-Edit `base/secret.yaml` and replace every `REPLACE_WITH_BASE64_ENCODED_*` placeholder:
-
+**Local / minikube + Docker Hub (test environment):**
 ```bash
-# Encode a value
-echo -n "your-value" | base64
-
-# Generate required keys
-python -c "import secrets; print(secrets.token_urlsafe(48))"           # SECRET_KEY / JWT_SECRET_KEY
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # ENCRYPTION_KEY
-
-# DATABASE_URL (in-cluster postgres)
-echo -n "postgresql://postgres:YOUR_PG_PASS@postgres:5432/aws_cost_dashboard" | base64
-
-# AWS credentials (skip if using IRSA on EKS)
-echo -n "AKIAIOSFODNN7EXAMPLE" | base64
+export DOCKERHUB_USERNAME=your-username
+export DOCKERHUB_TOKEN=your-token
+export AWS_ACCESS_KEY_ID=AKIA...     # optional — for Cost Explorer features
+export AWS_SECRET_ACCESS_KEY=...
+./scripts/minikube-deploy.sh
 ```
 
-### 2 — Update the Ingress host
-
-In `ingress/ingress.yaml`, replace both occurrences of `api.your-domain.com` with your actual hostname.
-
-### 3 — Update the backend image tag
-
-In `backend/deployment.yaml`, replace the image tag on both the `initContainer` and main `container`:
-```yaml
-image: rameshnkkrishnan/aws_cost_explorer_backend:latest
+**Production: EKS + ECR:**
+```bash
+export DOCKERHUB_USERNAME=...        # not needed — uses ECR
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
+export ECR_REPOSITORY=123456789012.dkr.ecr.us-east-1.amazonaws.com/aws-cost-dashboard-backend
+./scripts/eks-deploy.sh
 ```
-Use the same `VERSION` from `.env.production`. Build with `./scripts/build-prod.sh --push`.
 
-### 4 — Apply everything
+Both scripts handle secrets generation, image build/push, namespace creation,
+manifest templating, and rollout waiting automatically.
+
+### Manual apply (advanced)
+
+If you need to apply manually, the order matters:
 
 ```bash
-# Namespace and base resources first
+# 1. Namespace + RBAC first
 kubectl apply -f kubernetes/base/namespace.yaml
 kubectl apply -f kubernetes/base/rbac.yaml
+
+# 2. Generate and apply secrets (the deploy scripts do this automatically)
+kubectl create secret generic backend-secret --namespace=aws-cost-dashboard \
+  --from-literal=SECRET_KEY="$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")" \
+  --from-literal=JWT_SECRET_KEY="$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")" \
+  --from-literal=ENCRYPTION_KEY="$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")" \
+  --from-literal=DATABASE_URL="postgresql://postgres:PGPASS@postgres:5432/aws_cost_dashboard" \
+  --from-literal=POSTGRES_PASSWORD="PGPASS" \
+  --from-literal=REDIS_PASSWORD="" \
+  --from-literal=AWS_ACCESS_KEY_ID="" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="" \
+  --from-literal=TEAMS_WEBHOOK_URL="" \
+  --from-literal=EXPORT_S3_BUCKET=""
+
+kubectl create secret generic postgres-secret --namespace=aws-cost-dashboard \
+  --from-literal=POSTGRES_PASSWORD="PGPASS"
+
+# 3. ConfigMap + network policies
 kubectl apply -f kubernetes/base/configmap.yaml
-kubectl apply -f kubernetes/base/secret.yaml          # ← fill values first!
 kubectl apply -f kubernetes/base/network-policies.yaml
 
-# Storage (postgres + redis)
+# 4. Storage
 kubectl apply -f kubernetes/postgres/
 kubectl apply -f kubernetes/redis/
-
-# Wait for postgres to be ready before the backend tries to migrate
 kubectl rollout status statefulset/postgres -n aws-cost-dashboard
 
-# Backend
+# 5. Backend + ingress
 kubectl apply -f kubernetes/backend/
-
-# Ingress + TLS
 kubectl apply -f kubernetes/ingress/cert-issuer.yaml
 kubectl apply -f kubernetes/ingress/ingress.yaml
-```
-
-Or apply all at once (order is handled by K8s dependency resolution):
-```bash
-kubectl apply -f kubernetes/base/ -f kubernetes/postgres/ -f kubernetes/redis/ \
-              -f kubernetes/backend/ -f kubernetes/ingress/
 ```
 
 ---
@@ -169,22 +178,28 @@ kubectl logs -n aws-cost-dashboard -l app.kubernetes.io/component=backend -f
 # Check TLS certificate was issued
 kubectl describe certificate backend-tls -n aws-cost-dashboard
 
-# Test the health endpoint
-curl https://api.your-domain.com/health
+# Test the health endpoint (replace with your sslip.io URL from eks-deploy.sh output)
+curl https://<nlb-ip>.sslip.io/health
 ```
 
 ---
 
 ## Deploying a new backend version
 
+**Recommended: push to `main` and let GitHub Actions handle it.**
+The `.github/workflows/deploy-backend.yml` workflow builds the image, pushes it to ECR,
+patches the deployment tag, and runs `kubectl rollout status` automatically.
+
+**Manual rollout (if you need to deploy without CI):**
 ```bash
-# 1. Build and push the image
-./scripts/build-prod.sh --push
+# 1. Build and push via the production script
+./scripts/build-prod.sh --push      # pushes to ECR (reads ECR_REPOSITORY from env)
 
-# 2. Update the image tag in both containers in backend/deployment.yaml
-#    (initContainer + main container)
+# 2. Update the image tag in backend/deployment.yaml
+#    Both the initContainer (migrate) and the main container must use the same tag.
+#    The eks-deploy.sh script does this automatically via sed.
 
-# 3. Roll out
+# 3. Apply and wait
 kubectl apply -f kubernetes/backend/deployment.yaml
 kubectl rollout status deployment/backend -n aws-cost-dashboard
 
@@ -216,15 +231,22 @@ replace them with policies that allow egress to the RDS/ElastiCache CIDR or secu
 
 ## Using IRSA on EKS (recommended over static AWS credentials)
 
+IRSA is configured automatically by `scripts/eks-deploy.sh` when you provide
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. The EKS cluster itself is created with
+OIDC enabled via `scripts/eks-cluster.yaml`.
+
+To set it up manually:
+
 1. Create an IAM role with the Cost Explorer + EC2 + RDS permissions from `iam-policy.json`.
-2. Annotate the service account:
+2. Annotate the `backend-sa` ServiceAccount in `base/rbac.yaml`:
    ```yaml
-   # base/rbac.yaml — backend-sa
    annotations:
      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/awscost-backend-role
    ```
-3. Remove `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from `base/secret.yaml`.
-4. Set `automountServiceAccountToken: true` on the `backend-sa` ServiceAccount (IRSA needs it).
+3. Remove `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from `base/secret.yaml`
+   (leave the keys present but set them to empty strings, or omit them entirely).
+4. Ensure `automountServiceAccountToken: true` is set on `backend-sa` (IRSA requires it —
+   it is already set in `base/rbac.yaml`).
 
 ---
 
@@ -233,7 +255,7 @@ replace them with policies that allow egress to the RDS/ElastiCache CIDR or secu
 | Symptom | Check |
 |---------|-------|
 | Pods stuck in `Pending` | `kubectl describe pod <name> -n aws-cost-dashboard` — likely PVC or resource issue |
-| `ImagePullBackOff` | Image tag wrong or registry credentials missing |
+| `ImagePullBackOff` | Image tag wrong; on EKS verify IRSA/ECR permissions; on minikube re-run `--load` or check Docker Hub tag |
 | `CrashLoopBackOff` | `kubectl logs <pod> -n aws-cost-dashboard --previous` — check SECRET_KEY length ≥ 32 chars |
 | 502 from Ingress | Backend readiness probe failing — check DB connectivity |
 | CORS errors | Verify `cors-allow-origin` in ingress.yaml matches GitHub Pages URL exactly |

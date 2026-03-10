@@ -1,48 +1,43 @@
 # AWS Cost Dashboard — Infrastructure
 
-Terraform configuration for deploying the AWS Cost Dashboard backend to AWS.
+Terraform configuration for the AWS infrastructure layer of the AWS Cost Dashboard.
 
 ## Architecture
 
-The frontend is a static React app hosted on **GitHub Pages** (free). Only the backend (FastAPI) runs on AWS infrastructure.
+The frontend is a static React app hosted on **GitHub Pages** (free, no infrastructure needed).
+The backend (FastAPI) runs on **EKS** (Kubernetes), with Terraform managing the persistent data layer.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  GitHub Pages  (React SPA — static, free)                        │
-│  https://your-username.github.io/aws-cost-dashboard              │
+│  https://nkrameshkrishnan.github.io/aws-cost-dashboard/          │
 └────────────────────────┬─────────────────────────────────────────┘
                          │  HTTPS API calls
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  API Gateway HTTP API  (public HTTPS endpoint)                   │
+│  nginx Ingress  (NLB + sslip.io TLS)                             │
 │  CORS allows GitHub Pages + localhost                            │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │  VPC Link (private)
-                         ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Internal ALB  (private subnets only)                            │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  ECS Fargate — Backend  (FastAPI, port 8000)                     │
-│  Auto-scaling 2-10 tasks · Fargate + Fargate Spot                │
-│  Private subnets, no public IP                                   │
+│  EKS — Backend Deployment  (FastAPI, HPA 2-10 pods)              │
+│  Private subnets, IRSA for AWS API access                        │
 └───────┬────────────────┬───────────────────────────┬─────────────┘
         │                │                           │
         ▼                ▼                           ▼
-  RDS PostgreSQL   ElastiCache Redis         AWS APIs
+  RDS PostgreSQL   ElastiCache Redis         AWS APIs (IRSA)
   (Multi-AZ)       (Multi-AZ)           Cost Explorer, Budgets,
                                          EC2, RDS, Lambda, S3
 ```
 
-Network layout:
+**Division of responsibility:**
 
-```
-VPC (10.0.0.0/16)
-├── Public subnets  (10.0.0.0/24, 10.0.1.0/24) — NAT Gateways
-└── Private subnets (10.0.10.0/24, 10.0.11.0/24) — ECS, RDS, Redis, ALB
-```
+| Layer | Tool | What it manages |
+|-------|------|----------------|
+| Persistent infrastructure | **Terraform** | VPC · RDS · ElastiCache · ECR · Secrets Manager · CloudWatch |
+| Kubernetes cluster | **eksctl** (`scripts/eks-cluster.yaml`) | EKS cluster · node groups · OIDC / IRSA |
+| Application | **kubectl** (`kubernetes/` manifests) | Pods · Services · Ingress · HPA |
 
 ---
 
@@ -51,15 +46,12 @@ VPC (10.0.0.0/16)
 | Module | Resources |
 |--------|-----------|
 | `networking` | VPC, public/private subnets, IGW, NAT Gateways, route tables |
-| `security` | Security groups for ALB, ECS tasks, RDS, Redis, VPC Link |
+| `security` | Security groups for RDS and Redis (allow from VPC CIDR) |
+| `ecr` | ECR repository with scan-on-push and lifecycle policy |
 | `database` | RDS PostgreSQL (Multi-AZ in production) |
 | `cache` | ElastiCache Redis cluster |
 | `secrets` | AWS Secrets Manager — DB credentials + app secrets |
-| `monitoring` | CloudWatch log group, ECS task execution + task IAM roles |
-| `alb` | Internal ALB + backend target group + listeners |
-| `ecs` | ECS cluster, backend task definition + service, auto-scaling |
-| `vpc-link` | VPC Link connecting API Gateway to the private ALB |
-| `api-gateway` | API Gateway HTTP API — public entry point, CORS, CloudWatch logs |
+| `monitoring` | CloudWatch log group `/eks/awscost-production-backend` |
 
 ---
 
@@ -76,7 +68,7 @@ cp terraform.tfvars.example terraform.tfvars
 Key values to fill in:
 
 ```hcl
-backend_image = "ghcr.io/your-org/aws-cost-dashboard-backend:1.0.0"
+aws_region = "us-east-1"
 
 db_username = "dbadmin"
 db_password = "..."        # openssl rand -base64 24
@@ -84,49 +76,55 @@ db_password = "..."        # openssl rand -base64 24
 secret_key     = "..."     # openssl rand -hex 32
 jwt_secret_key = "..."     # openssl rand -hex 32
 encryption_key = "..."     # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-cors_allowed_origins = [
-  "https://YOUR-GITHUB-USERNAME.github.io",
-  "http://localhost:5173",
-]
 ```
 
-### 2. Deploy
+### 2. Apply
 
 ```bash
 terraform init
-terraform plan
-terraform apply
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
 
-Deployment takes approximately 15-20 minutes.
+Deployment takes approximately 10-15 minutes (RDS + ElastiCache spin-up dominates).
 
-### 3. Wire up the frontend
-
-After apply, retrieve the API URL:
+### 3. Note the outputs
 
 ```bash
-terraform output api_gateway_url
+terraform output ecr_repository_url   # → set as ECR_REPOSITORY in GitHub Actions
+terraform output rds_address           # → update kubernetes/base/configmap.yaml
+terraform output redis_endpoint        # → update kubernetes/base/configmap.yaml
 ```
 
-Set this value as `VITE_API_BASE_URL` in root `.env.production`, then rebuild the frontend and push to GitHub Pages.
+### 4. Deploy the application
+
+After Terraform, create the EKS cluster and deploy the backend:
+
+```bash
+./scripts/eks-deploy.sh
+```
+
+That script reads the ECR URL from the environment and handles cluster creation,
+image build/push, TLS ingress setup, and rollout.
 
 ---
 
 ## Estimated Monthly Cost
 
+### Production (Multi-AZ, 2 nodes)
+
 | Resource | Spec | Est. cost |
 |----------|------|-----------|
-| API Gateway | HTTP API | ~$1 |
-| ECS Fargate | 2 tasks, 1 vCPU / 2 GB (Spot mix) | ~$40-60 |
+| EKS cluster control plane | | ~$73 |
+| EC2 nodes (t3.medium × 2) | on-demand | ~$60 |
 | RDS PostgreSQL | db.t3.medium, Multi-AZ, 100 GB | ~$130 |
 | ElastiCache Redis | cache.t3.medium, 2 nodes | ~$100 |
-| Internal ALB | | ~$20 |
-| NAT Gateway | 2 (Multi-AZ) | ~$65 |
+| NAT Gateway | 2 (Multi-AZ HA) | ~$65 |
+| ECR | storage + transfer | ~$2 |
 | CloudWatch Logs | | ~$5 |
-| **Total** | | **~$360-380/month** |
+| **Total** | | **~$435/month** |
 
-Development environment (smaller instances, single-AZ, 1 task): ~$100/month
+### Development (single-AZ, 1 small node)
 
 ```hcl
 environment           = "dev"
@@ -134,25 +132,31 @@ db_instance_class     = "db.t3.small"
 db_allocated_storage  = 20
 redis_node_type       = "cache.t3.micro"
 redis_num_cache_nodes = 1
-ecs_desired_count     = 1
-ecs_min_capacity      = 1
 ```
+
+Estimated dev cost: ~$140/month.
+
+> **Tip:** Stop the EKS node group overnight to cut EC2 costs:
+> `aws eks update-nodegroup-config --cluster-name aws-cost-dashboard --nodegroup-name backend-ng --scaling-config desiredSize=0`
 
 ---
 
-## CORS Configuration
+## CORS
 
-`cors_allowed_origins` must include your GitHub Pages URL before deploying. Both the API Gateway and the backend read this list.
+CORS is configured in two places:
 
-```hcl
-cors_allowed_origins = [
-  "https://your-username.github.io",       # GitHub Pages (primary)
-  "https://dashboard.your-domain.com",     # custom domain (if any)
-  "http://localhost:5173",                 # local dev
-]
-```
+1. **Backend application** — `CORS_ORIGINS` in `.env.production`:
+   ```
+   CORS_ORIGINS=https://nkrameshkrishnan.github.io,http://localhost:5173,http://localhost:3000
+   ```
 
-After changing origins, run `terraform apply` then rebuild/redeploy the frontend.
+2. **nginx Ingress** — `nginx.ingress.kubernetes.io/cors-allow-origin` in `kubernetes/ingress/ingress.yaml`:
+   ```yaml
+   nginx.ingress.kubernetes.io/cors-allow-origin: "https://nkrameshkrishnan.github.io"
+   ```
+
+Both are already set for the production GitHub Pages URL.
+The CORS origin is the scheme + host only — **no trailing slash, no path**.
 
 ---
 
@@ -179,19 +183,31 @@ aws dynamodb create-table \
 ## Useful Commands
 
 ```bash
-# Get all outputs (includes api_gateway_url)
+# Get all outputs
 terraform output
 
 # Tail backend logs
-aws logs tail /ecs/awscost-production-backend --follow
+aws logs tail /eks/awscost-production-backend --follow
 
-# Force a new ECS deployment (picks up a new image tag)
-aws ecs update-service \
-  --cluster $(terraform output -raw ecs_cluster_name) \
-  --service $(terraform output -raw backend_service_name) \
-  --force-new-deployment
+# Check running pods
+kubectl get pods -n aws-cost-dashboard
 
-# Destroy (irreversible — requires manual RDS deletion protection removal first)
+# Force a new rollout (picks up a new image)
+kubectl rollout restart deployment/backend -n aws-cost-dashboard
+
+# Scale nodes to zero (save cost overnight)
+aws eks update-nodegroup-config \
+  --cluster-name aws-cost-dashboard \
+  --nodegroup-name backend-ng \
+  --scaling-config desiredSize=0,minSize=0,maxSize=4
+
+# Scale nodes back up
+aws eks update-nodegroup-config \
+  --cluster-name aws-cost-dashboard \
+  --nodegroup-name backend-ng \
+  --scaling-config desiredSize=2,minSize=1,maxSize=4
+
+# Destroy all Terraform resources (irreversible)
 terraform destroy
 ```
 
@@ -199,10 +215,19 @@ terraform destroy
 
 ## Troubleshooting
 
-**ECS tasks not starting** — Check CloudWatch Logs (`/ecs/awscost-production-backend`). Verify Secrets Manager has the correct keys and the ECS task execution role has `secretsmanager:GetSecretValue` permission.
+**Pods not starting** — Check logs: `kubectl logs -n aws-cost-dashboard deploy/backend`
+Verify the `backend-secret` exists and has correct `DATABASE_URL` and `ENCRYPTION_KEY`.
 
-**CORS errors in browser** — Confirm the exact GitHub Pages origin (no trailing slash) is in `cors_allowed_origins`. Run `terraform apply` to push the change.
+**CORS errors in browser** — The origin `https://nkrameshkrishnan.github.io` is already
+configured. If you see CORS errors, confirm the ingress annotation and `CORS_ORIGINS` env
+var match — no trailing slash, no path suffix.
 
-**`terraform apply` fails on RDS** — `db_password` must be at least 8 characters and avoid special characters (`@`, `/`, `"`).
+**`terraform apply` fails on RDS** — `db_password` must be ≥ 8 chars and must not contain
+`@`, `/`, or `"`.
 
-**Frontend gets 502** — The `/health` endpoint on the backend is failing. Check ECS task logs and confirm `DATABASE_URL` and `REDIS_HOST` resolve correctly inside the VPC.
+**Frontend gets 502** — Run `kubectl describe pod -n aws-cost-dashboard -l app.kubernetes.io/component=backend`
+to check startup failures. Usually a bad `DATABASE_URL` or unreachable Redis.
+
+**ECR push denied** — IAM user needs `ecr:GetAuthorizationToken`,
+`ecr:BatchCheckLayerAvailability`, `ecr:PutImage`, `ecr:InitiateLayerUpload`,
+`ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`.
